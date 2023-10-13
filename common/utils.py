@@ -4,6 +4,7 @@ import plotly.graph_objects as go
 import random
 import scipy
 import math
+import matplotlib.animation as animation
 
 from tqdm import tqdm
 from mpl_toolkits.axes_grid1 import make_axes_locatable
@@ -227,8 +228,42 @@ def make_img_transition_y(img, depth, is_dy_pos=True):
         transition_kernel = np.flipud(transition_kernel)
         new_img[0:depth, :] = img[0:depth, :] * transition_kernel + \
                           additional_img[-depth:, :] * (1 - transition_kernel)  
-        return new_img, additional_img[0:-depth:1, :]    
+        return new_img, additional_img[0:-depth:1, :]
+		
+		
+def make_img_transition_xy(img, depth, is_dx_pos=True, is_dy_pos=True):
+    new_img, add_img = make_img_transition_x(img, depth, is_dx_pos=is_dx_pos)
+    new_img = np.concatenate((new_img, add_img), axis=1)
+    
+    new_img, add_img = make_img_transition_y(new_img, depth, is_dy_pos=is_dy_pos)
+    new_img = np.concatenate((new_img, add_img), axis=0)
+    
+    return new_img
 
+
+def shift_img_x(img, width, dx, is_dx_pos=True): 
+    # Wind blows in negative X dirrection
+    if is_dx_pos:
+        return img[:, dx:width + dx]
+    else:
+        return img[:, width - dx:-dx]
+
+
+def shift_img_y(img, height, dy, is_dy_pos=True):
+    # Wind blows in negative Y dirrection
+    if is_dy_pos:
+        return img[dy:height + dy, :]
+    else:
+        return img[height - dy:-dy, :]
+
+    
+def shift_img_xy(img, window_shape, dx, dy, is_dx_pos=True, is_dy_pos=True):
+    height, width = window_shape
+    
+    shifted_img = shift_img_x(img, width, dx, is_dx_pos=is_dx_pos)
+    shifted_img = shift_img_y(shifted_img, height, dy, is_dy_pos=is_dy_pos)
+    
+    return shifted_img
 
 
 ###################################################################################################################
@@ -328,7 +363,7 @@ def gen_cloud(x_size, y_size, factor=2.4):
     yy = np.linspace(-y_size / 2, y_size / 2, y_size)
     whitenoise = np.random.normal(0, 1, (y_size, x_size))
     cloud_freq = find_ft_2d(whitenoise)  
-    kernel = freq_filter(xx, yy, factor=factor)
+    kernel = freq_pink_filter_2d(xx, yy, factor=factor)
     cloud_freq_filtered = cloud_freq * kernel
     cloud_spatial = find_ift_2d(cloud_freq_filtered).real
     return normalize_img(cloud_spatial)
