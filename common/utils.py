@@ -6,6 +6,7 @@ import scipy
 import math
 import matplotlib.animation as animation
 
+from PIL import Image
 from tqdm import tqdm
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 
@@ -102,7 +103,7 @@ def freq_numbers_2d(shape):
     y_size, x_size = shape
     y_freq_numbers = freq_numbers_1d(y_size)
     x_freq_numbers = freq_numbers_1d(x_size)
-    return y_freq_numbers, x_freq_numbers
+    return x_freq_numbers, y_freq_numbers
     
 
 def freq_arr_2d(shape, x_step=1, y_step=1):
@@ -111,6 +112,12 @@ def freq_arr_2d(shape, x_step=1, y_step=1):
     x_freq = x_freq_numbers / x_step / x_size
     y_freq = y_freq_numbers / y_step / y_size
     return y_freq, x_freq
+	
+	
+def freq_mesh_2d(shape):
+    x_freq_numbers, y_freq_numbers = freq_numbers_2d(shape) 
+    x_mesh, y_mesh = np.meshgrid(x_freq_numbers, y_freq_numbers)
+    return x_mesh, y_mesh
 
 
 ###################################################################################################################
@@ -135,8 +142,8 @@ def freq_filter(x_freq, y_freq, factor=2.4):
 """
 
 
-def freq_pink_filter_2d(x_freq, y_freq, factor=1, no_mean=False):
-    f = freq_filter_2d(x_freq, y_freq)
+def freq_pink_filter_2d(x_freq, y_freq, factor=1, x_stretch=1, y_stretch=1, no_mean=False):
+    f = freq_filter_2d(x_freq / x_stretch, y_freq / y_stretch)
     f = 1 / (1 + f)
     f = f ** factor
     f = np.where(f==1, 0, f) if no_mean else f
@@ -197,72 +204,98 @@ def spatial_smooth_filter(x_size, y_size, depth, horiz=True):
     return kernel
 
 
-def make_img_transition_x(img, depth, is_dx_pos=True):
+def make_img_transition_x(img, depth, is_dx_pos=True, outter_smooth=False):
     y_size, x_size = img.shape
-    additional_img = gen_cloud(x_size + depth, y_size)   
+    add_img = gen_cloud(x_size + depth, y_size)   
     transition_kernel = spatial_smooth_filter(x_size, y_size, depth)     
     
-    new_img = np.copy(img)
+    img_copy = np.copy(img)
     if is_dx_pos:
-        new_img[:, -depth:x_size] = img[:, -depth:x_size] * transition_kernel + \
-                                additional_img[:, 0:depth] * (1 - transition_kernel)
-        return new_img, additional_img[:, depth:]    
+        img_copy[:, -depth:] = img[:, -depth:] * transition_kernel + \
+                               add_img[:, :depth] * (1 - transition_kernel)
+        img_copy = np.concatenate((img_copy, add_img[:, depth:]), axis=1)
     else:
         transition_kernel = np.fliplr(transition_kernel)
-        new_img[:, 0:depth] = img[:, 0:depth] * transition_kernel + \
-                          additional_img[:, -depth:] * (1 - transition_kernel)  
-        return new_img, additional_img[:, 0:-depth]    
+        img_copy[:, :depth] = img[:, :depth] * transition_kernel + \
+                              add_img[:, -depth:] * (1 - transition_kernel)  
+        img_copy = np.concatenate((add_img[:, 0:-depth], img_copy), axis=1) 
+    
+    if outter_smooth:
+        add_img = gen_cloud(2 * depth, y_size)   
+        transition_kernel = spatial_smooth_filter(x_size, y_size, depth) 
+        transition_kernel = np.fliplr(transition_kernel)
+        img_copy[:, :depth] = img_copy[:, :depth] * transition_kernel + \
+                              add_img[:, :depth] * (1 - transition_kernel)  
+        transition_kernel = np.fliplr(transition_kernel)
+        img_copy[:, -depth:] = img_copy[:, -depth:] * transition_kernel + \
+                               add_img[:, -depth:] * (1 - transition_kernel)
+    return img_copy
+    
 
-
-def make_img_transition_y(img, depth, is_dy_pos=True):
+def make_img_transition_y(img, depth, is_dy_pos=True, outter_smooth=False):
     y_size, x_size = img.shape
-    additional_img = gen_cloud(x_size, y_size + depth)   
+    add_img = gen_cloud(x_size, y_size + depth)   
     transition_kernel = spatial_smooth_filter(x_size, y_size, depth, horiz=False)
         
-    new_img = np.copy(img)
+    img_copy = np.copy(img)
     if is_dy_pos:
-        new_img[-depth:x_size, :] = img[-depth:x_size, :] * transition_kernel + \
-                                additional_img[0:depth, :] * (1 - transition_kernel)
-        return new_img, additional_img[depth:, :]    
+        img_copy[-depth:, :] = img[-depth:, :] * transition_kernel + \
+                               add_img[:depth, :] * (1 - transition_kernel)
+        img_copy = np.concatenate((img_copy, add_img[depth:, :]), axis=0)
     else:
         transition_kernel = np.flipud(transition_kernel)
-        new_img[0:depth, :] = img[0:depth, :] * transition_kernel + \
-                          additional_img[-depth:, :] * (1 - transition_kernel)  
-        return new_img, additional_img[0:-depth:1, :]
-		
-		
-def make_img_transition_xy(img, depth, is_dx_pos=True, is_dy_pos=True):
-    new_img, add_img = make_img_transition_x(img, depth, is_dx_pos=is_dx_pos)
-    new_img = np.concatenate((new_img, add_img), axis=1)
+        img_copy[:depth, :] = img[:depth, :] * transition_kernel + \
+                              add_img[-depth:, :] * (1 - transition_kernel)  
+        img_copy = np.concatenate((add_img[:-depth, :], img_copy), axis=0)
     
-    new_img, add_img = make_img_transition_y(new_img, depth, is_dy_pos=is_dy_pos)
-    new_img = np.concatenate((new_img, add_img), axis=0)
-    
+    if outter_smooth:
+        add_img = gen_cloud(x_size, 2 * depth)   
+        transition_kernel = spatial_smooth_filter(x_size, y_size, depth, horiz=False) 
+        transition_kernel = np.flipud(transition_kernel)
+        img_copy[:depth, :] = img_copy[:depth, :] * transition_kernel + \
+                              add_img[:depth, :] * (1 - transition_kernel)   
+        transition_kernel = np.flipud(transition_kernel)
+        img_copy[-depth:, :] = img_copy[-depth:, :] * transition_kernel + \
+                               add_img[-depth:, :] * (1 - transition_kernel)  
+    return img_copy
+
+
+def make_img_transition_xy(img, depth, is_dx_pos=True, is_dy_pos=True, outter_smooth=False):
+    new_img = make_img_transition_x(img, depth, is_dx_pos=is_dx_pos, outter_smooth=outter_smooth)
+    new_img = make_img_transition_y(new_img, depth, is_dy_pos=is_dy_pos, outter_smooth=outter_smooth)
     return new_img
 
 
-def shift_img_x(img, width, dx, is_dx_pos=True): 
+def shift_img_x(img, dx, is_dx_pos=True): 
+    _, width = img.shape
+    
     # Wind blows in negative X dirrection
     if is_dx_pos:
-        return img[:, dx:width + dx]
+        c1 = img[:, -dx:]
+        c2 = img[:, :-dx]
     else:
-        return img[:, width - dx:-dx]
+        c1 = img[:, dx:]
+        c2 = img[:, :dx]
+    return np.concatenate((c1, c2), axis=1)
 
 
-def shift_img_y(img, height, dy, is_dy_pos=True):
+def shift_img_y(img, dy, is_dy_pos=True):
+    height, _ = img.shape
+    
     # Wind blows in negative Y dirrection
     if is_dy_pos:
-        return img[dy:height + dy, :]
+        c1 = img[-dy:, :]
+        c2 = img[:-dy, :]
     else:
-        return img[height - dy:-dy, :]
+        c1 = img[dy:, :]
+        c2 = img[:dy, :]
+    return np.concatenate((c1, c2), axis=0)
 
     
-def shift_img_xy(img, window_shape, dx, dy, is_dx_pos=True, is_dy_pos=True):
-    height, width = window_shape
-    
-    shifted_img = shift_img_x(img, width, dx, is_dx_pos=is_dx_pos)
-    shifted_img = shift_img_y(shifted_img, height, dy, is_dy_pos=is_dy_pos)
-    
+def shift_img_xy(img, dx, dy, is_dx_pos=True, is_dy_pos=True):
+    height, width = img.shape
+    shifted_img = shift_img_x(img, dx, is_dx_pos=is_dx_pos)
+    shifted_img = shift_img_y(shifted_img, dy, is_dy_pos=is_dy_pos)
     return shifted_img
 
 
@@ -418,6 +451,24 @@ def show_surfaces(*surfaces, axes=None, cmap=None, colorscale='Thermal', showsca
         showscale = False
     return fig
     
+	
+def plot_graphs(*graphs, ax=None, figsize=None, grid=False, xlabel='', ylabel='', title=''):   
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+        
+    for graph in graphs:        
+        if isinstance(graph, (list, tuple)):
+            ax.plot(*graph)
+        else:
+            ax.plot(graph)
+    
+    ax.grid(grid)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.set_title(title)
+        
+    return ax
+
 
 def lin_regression(x, y):
     # y - original img
@@ -438,3 +489,15 @@ def lin_phase(start, end, size):
     else: 
         freq = np.append(neg_freq, pos_freq)
     return freq
+
+
+def open_img(filename, no_mean=True, grayscale=True):
+    img = Image.open(filename)
+    
+    if grayscale:
+        img = img.convert('L')
+    
+    if no_mean:
+        img -= np.mean(img)
+    
+    return np.array(img)
