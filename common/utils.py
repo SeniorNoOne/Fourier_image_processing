@@ -143,17 +143,23 @@ def freq_filter(x_freq, y_freq, factor=2.4):
 
 
 def freq_pink_filter_2d(x_freq, y_freq, factor=1, x_stretch=1, y_stretch=1, no_mean=False):
-    f = freq_filter_2d(x_freq / x_stretch, y_freq / y_stretch)
-    f = 1 / (1 + f)
+    x_freq, y_freq = np.abs(x_freq), np.abs(y_freq)
+    fr = freq_filter_2d(x_freq / x_stretch, y_freq / y_stretch)
+    f = 1 / np.where(fr <= 1, 1, fr)
     f = f ** factor
-    f = np.where(f==1, 0, f) if no_mean else f
+    if no_mean:
+        f_mask = np.abs(fr) < 1
+        f[f_mask] = 0
     return f
 
 
-def freq_pink_filter_1d(x_freq, factor=1, no_mean=False):
-    f = 1 / (1 + np.abs(x_freq))
+def freq_pink_filter_1d(x_freq, factor=0.5, no_mean=False):
+    x_freq = np.abs(x_freq)
+    f = 1 / np.where(x_freq <= 1, 1, x_freq)
     f = f ** factor
-    f = np.where(f==1, 0, f) if no_mean else f
+    if no_mean:
+        f_mask = np.abs(x_freq) < 1
+        f[f_mask] = 0
     return f
 
 
