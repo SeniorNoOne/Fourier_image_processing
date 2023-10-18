@@ -12,8 +12,143 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 
 
 ###################################################################################################################
+#                                          Latice noise utils                                                     #
+###################################################################################################################
+
+
+def graph_mesh(x_min, x_max, x_step):
+    mesh = np.arange(x_min, x_max + 1, x_step)
+    return mesh
+
+
+def qubic_interp(x):
+    return x * x * (3 - 2 * x)
+
+
+def fifth_order_interp(x):
+    return 6 * x ** 5 - 15 * x ** 4 + 10 * x ** 3
+
+
+def gen_value_noise_1d(outp_noise_size, iterm_mesh_size, octaves_num, persistence, func=None):
+    random_values = []
+    harmonics = []
+    amplitude = persistence
+
+    for _ in range(octaves_num):
+        rv = amplitude * np.random.rand(outp_noise_size // iterm_mesh_size + 1)
+        octave = gen_single_octave_1d(rv, outp_noise_size, iterm_mesh_size, func=func)
+
+        random_values.append(rv)
+        harmonics.append(octave)
+        iterm_mesh_size = iterm_mesh_size // 2
+        amplitude *= persistence
+
+    return harmonics, random_values
+
+
+def gen_single_octave_1d(random_values, size, grid_size, func=None):
+    num_cells_x = size // grid_size
+    noise_map = np.zeros(size + 1)
+
+    for x in range(size):
+        cell_x = x // grid_size
+        local_x = (x % grid_size) / grid_size
+        left = random_values[cell_x]
+        right = random_values[cell_x + 1]
+        smooth_x = func(local_x) if func else local_x
+        interp = left * (1 - smooth_x) + right * smooth_x
+        noise_map[x] += interp
+        
+    noise_map[-1] = random_values[-1]
+    return noise_map
+
+
+def gen_single_octave_2d(random_values, outp_noise_shape, iterm_mesh_shape, func=None):
+    h, w = outp_noise_shape
+    gr_h, gr_w = iterm_mesh_shape
+    num_cells_x = w // gr_w
+    num_cells_y = h // gr_h
+    noise_map = np.zeros((h + 1, w + 1))
+    
+    for y in range(h):
+        for x in range(w):
+            cell_x = x // gr_w
+            cell_y = y // gr_h
+
+            local_x = (x % gr_w) / gr_w
+            local_y = (y % gr_h) / gr_h
+
+            top_left = random_values[cell_y, cell_x]
+            top_right = random_values[cell_y, cell_x + 1]
+            bottom_left = random_values[cell_y + 1, cell_x]
+            bottom_right = random_values[cell_y + 1, cell_x + 1]
+
+            if func is None:
+                smooth_x = local_x
+                smooth_y = local_y
+            else:
+                smooth_x = func(local_x)
+                smooth_y = func(local_y)
+
+            interp_top = top_left * (1 - smooth_x) + top_right * smooth_x
+            interp_bottom = bottom_left * (1 - smooth_x) + bottom_right * smooth_x
+            noise_map[y, x] += interp_top * (1 - smooth_y) + interp_bottom * smooth_y          
+            noise_map[-1, x] = bottom_left * (1 - smooth_x) + bottom_right * smooth_x
+        noise_map[y, -1] = top_right * (1 - smooth_y) + bottom_right * smooth_y
+    noise_map[-1, -1] = random_values[-1, -1]
+    return noise_map
+
+
+def gen_value_noise_2d(outp_noise_shape, iterm_mesh_shape, octave_nums, persistence, func=None):
+    harmonics = []
+    random_values = []
+    h, w = outp_noise_shape
+    gr_h, gr_w = iterm_mesh_shape
+    amplitude = persistence  
+
+    for _ in range(octave_nums):
+        rv = amplitude * np.random.rand(h // gr_h + 1, w // gr_w + 1)
+        octave = gen_single_octave_2d(rv, outp_noise_shape, (gr_h, gr_w), func=func)
+
+        random_values.append(rv)
+        harmonics.append(octave)
+        gr_h, gr_w = gr_h // 2, gr_w // 2
+        amplitude *= persistence
+
+    # noise_map = np.sum(harmonics, axis=0)
+    # noise_map = (noise_map - np.min(noise_map)) / (np.max(noise_map) - np.min(noise_map))
+    return harmonics
+
+
+###################################################################################################################
 #                                              Array utils                                                        #
 ###################################################################################################################
+
+
+def get_slice(arr, rows, cols):
+    if len(rows) != len(cols):
+        print('Row and column indexes arrays have different sizes')
+        return
+
+    arr_cols, arr_rows = arr.shape
+    sliced_arr = np.zeros(len(rows))
+
+    for index, (row, col) in enumerate(zip(rows, cols)):
+        c_l, c_r = int(col), int(col) + 1
+        r_t, r_b = int(row), int(row) + 1
+        eta_col, eta_row = (col - c_l), (row - r_t)
+
+        if c_r >= arr_cols:
+            c_r = c_r - 1
+
+        if r_b >= arr_rows:
+            r_b = r_b - 1
+
+        top = (1 - eta_row) * arr[r_t, c_l] + eta_row * arr[r_t, c_r]
+        bottom = (1 - eta_row) * arr[r_b, c_l] + eta_row * arr[r_b, c_r]
+        total = (1 - eta_col) * top + eta_col * bottom
+        sliced_arr[index] = total
+    return sliced_arr
 
 
 def normalize(arr, zero_padding=False, offset_coef=0.001):
@@ -160,6 +295,24 @@ def freq_pink_filter_1d(x_freq, factor=0.5, no_mean=False):
     if no_mean:
         f_mask = np.abs(x_freq) < 1
         f[f_mask] = 0
+    return f
+
+
+def freq_pink_filter_1d_old(x_freq, factor=0.5, no_mean=False):
+    x_freq = np.abs(x_freq)
+    f = 1 / (1 + np.abs(x_freq))
+    f = f ** factor
+    if no_mean:
+        f_mask = np.abs(x_freq) < 1
+        f[f_mask] = 0
+    return f
+
+
+def freq_pink_filter_2d_old(x_freq, y_freq, factor=1, x_stretch=1, y_stretch=1, no_mean=False):
+    f = freq_filter_2d(x_freq / x_stretch, y_freq / y_stretch)
+    f = 1 / (1 + f)
+    f = f ** factor
+    f = np.where(f==1, 0, f) if no_mean else f
     return f
 
 
