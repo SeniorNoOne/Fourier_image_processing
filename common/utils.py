@@ -1,123 +1,12 @@
-import numpy as np
+import matplotlib.animation as animation
 import matplotlib.pyplot as plt
+import numpy as np
 import plotly.graph_objects as go
 import random
-import scipy
-import math
-import matplotlib.animation as animation
 
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 from PIL import Image
 from tqdm import tqdm
-from mpl_toolkits.axes_grid1 import make_axes_locatable
-
-
-###################################################################################################################
-#                                          Latice noise utils                                                     #
-###################################################################################################################
-
-
-def graph_mesh(x_min, x_max, x_step):
-    mesh = np.arange(x_min, x_max + 1, x_step)
-    return mesh
-
-
-def qubic_interp(x):
-    return x * x * (3 - 2 * x)
-
-
-def fifth_order_interp(x):
-    return 6 * x ** 5 - 15 * x ** 4 + 10 * x ** 3
-
-
-def gen_value_noise_1d(outp_noise_size, iterm_mesh_size, octaves_num, persistence, func=None):
-    random_values = []
-    harmonics = []
-    amplitude = persistence
-
-    for _ in range(octaves_num):
-        rv = amplitude * np.random.rand(outp_noise_size // iterm_mesh_size + 1)
-        octave = gen_single_octave_1d(rv, outp_noise_size, iterm_mesh_size, func=func)
-
-        random_values.append(rv)
-        harmonics.append(octave)
-        iterm_mesh_size = iterm_mesh_size // 2
-        amplitude *= persistence
-
-    return harmonics, random_values
-
-
-def gen_single_octave_1d(random_values, size, grid_size, func=None):
-    num_cells_x = size // grid_size
-    noise_map = np.zeros(size + 1)
-
-    for x in range(size):
-        cell_x = x // grid_size
-        local_x = (x % grid_size) / grid_size
-        left = random_values[cell_x]
-        right = random_values[cell_x + 1]
-        smooth_x = func(local_x) if func else local_x
-        interp = left * (1 - smooth_x) + right * smooth_x
-        noise_map[x] += interp
-        
-    noise_map[-1] = random_values[-1]
-    return noise_map
-
-
-def gen_single_octave_2d(random_values, outp_noise_shape, iterm_mesh_shape, func=None):
-    h, w = outp_noise_shape
-    gr_h, gr_w = iterm_mesh_shape
-    num_cells_x = w // gr_w
-    num_cells_y = h // gr_h
-    noise_map = np.zeros((h + 1, w + 1))
-    
-    for y in range(h):
-        for x in range(w):
-            cell_x = x // gr_w
-            cell_y = y // gr_h
-
-            local_x = (x % gr_w) / gr_w
-            local_y = (y % gr_h) / gr_h
-
-            top_left = random_values[cell_y, cell_x]
-            top_right = random_values[cell_y, cell_x + 1]
-            bottom_left = random_values[cell_y + 1, cell_x]
-            bottom_right = random_values[cell_y + 1, cell_x + 1]
-
-            if func is None:
-                smooth_x = local_x
-                smooth_y = local_y
-            else:
-                smooth_x = func(local_x)
-                smooth_y = func(local_y)
-
-            interp_top = top_left * (1 - smooth_x) + top_right * smooth_x
-            interp_bottom = bottom_left * (1 - smooth_x) + bottom_right * smooth_x
-            noise_map[y, x] += interp_top * (1 - smooth_y) + interp_bottom * smooth_y          
-            noise_map[-1, x] = bottom_left * (1 - smooth_x) + bottom_right * smooth_x
-        noise_map[y, -1] = top_right * (1 - smooth_y) + bottom_right * smooth_y
-    noise_map[-1, -1] = random_values[-1, -1]
-    return noise_map
-
-
-def gen_value_noise_2d(outp_noise_shape, iterm_mesh_shape, octave_nums, persistence, func=None):
-    harmonics = []
-    random_values = []
-    h, w = outp_noise_shape
-    gr_h, gr_w = iterm_mesh_shape
-    amplitude = persistence  
-
-    for _ in range(octave_nums):
-        rv = amplitude * np.random.rand(h // gr_h + 1, w // gr_w + 1)
-        octave = gen_single_octave_2d(rv, outp_noise_shape, (gr_h, gr_w), func=func)
-
-        random_values.append(rv)
-        harmonics.append(octave)
-        gr_h, gr_w = gr_h // 2, gr_w // 2
-        amplitude *= persistence
-
-    # noise_map = np.sum(harmonics, axis=0)
-    # noise_map = (noise_map - np.min(noise_map)) / (np.max(noise_map) - np.min(noise_map))
-    return harmonics
 
 
 ###################################################################################################################
@@ -126,12 +15,26 @@ def gen_value_noise_2d(outp_noise_shape, iterm_mesh_shape, octave_nums, persiste
 
 
 def get_slice(arr, rows, cols):
+    '''
+    Extract a slice of values from a 2D NumPy array.
+
+    Parameters:
+        arr (numpy.ndarray): The input 2D array from which to extract the slice.
+        rows (list): A list of row indexes for the slice.
+        cols (list): A list of column indexes for the slice.
+
+    Returns:
+        numpy.ndarray: A 1D array containing the extracted slice values.
+
+    Raises:
+        ValueError: If the lengths of 'rows' and 'cols' are different.
+    '''
+
     if len(rows) != len(cols):
-        print('Row and column indexes arrays have different sizes')
-        return
+        raise ValueError('Row and column indexes arrays have different sizes')
 
     arr_cols, arr_rows = arr.shape
-    sliced_arr = np.zeros(len(rows))
+    sliced_arr = np.zeros_like(rows)
 
     for index, (row, col) in enumerate(zip(rows, cols)):
         c_l, c_r = int(col), int(col) + 1
@@ -148,23 +51,75 @@ def get_slice(arr, rows, cols):
         bottom = (1 - eta_row) * arr[r_b, c_l] + eta_row * arr[r_b, c_r]
         total = (1 - eta_col) * top + eta_col * bottom
         sliced_arr[index] = total
+		
     return sliced_arr
 
 
 def normalize(arr, zero_padding=False, offset_coef=0.001):
+    '''
+    Normalize a NumPy array to the [0, 1] range.
+
+    Parameters:
+        arr (numpy.ndarray): The input array to be normalized.
+        zero_padding (bool, optional): If True, normalize without zero-padding.
+        offset_coef (float, optional): Coefficient to calculate the offset when zero_padding is False.
+
+    Returns:
+        numpy.ndarray: The normalized array.
+
+    Notes:
+        If zero_padding is True, the normalization is performed in the range [0, 1] without zero-padding.
+        If zero_padding is False, an offset is added to ensure positive values and normalize to [0, 1].
+
+    Examples:
+        >>> arr = np.array([1, 2, 3, 4, 5])
+        >>> normalize(arr)
+        array([0.  , 0.25, 0.5 , 0.75, 1.  ])
+        >>> normalize(arr, zero_padding=True)
+        array([0.  , 0.25, 0.5 , 0.75, 1.  ])
+    '''
+
     min_val = np.min(arr)
     max_val = np.max(arr)
-    offset = offset_coef * abs(min_val)
-    new_arr = arr - min_val if zero_padding else arr - min_val + offset
-    d = (max_val - min_val) if zero_padding else (max_val - min_val + offset)
-    new_arr = new_arr / d
+    
+    if zero_padding:
+        new_arr = (arr - min_val) / (max_val - min_val)
+    else:
+        offset = offset_coef * abs(min_val)
+        new_arr = (arr - min_val + offset) / (max_val - min_val + offset)
+
     return new_arr
 
 
 def normalize_img(arr):
+    '''
+    Normalize an image array to the [0, 255] range.
+
+    Parameters:
+        arr (numpy.ndarray): The input image array to be normalized.
+
+    Returns:
+        numpy.ndarray: The normalized image array.
+
+    Notes:
+        If the input array values are already in the range [0, 255], no normalization is performed.
+        Otherwise, the input array values are scaled to fit within the [0, 255] range.
+
+    Examples:
+        >>> image = np.array([[100, 200], [50, 150]])
+        >>> normalize_img(image)
+        array([[100, 200],
+               [ 50, 150]])
+        >>> image = np.array([[50, 150], [25, 75]])
+        >>> normalize_img(image)
+        array([[  0., 255.],
+               [  0., 127.5]])
+    '''
+    
     arr_min = np.min(arr)
     arr_max = np.max(arr)
-    if arr_min > 0 and arr_max < 255: 
+    
+    if arr_min >= 0 and arr_max <= 255: 
         return arr
     else:
         arr_norm = 255 * (arr - arr_min) / (arr_max - arr_min)
@@ -172,6 +127,29 @@ def normalize_img(arr):
 
 
 def threshold_arr_1d(arr, th_val, use_abs=False):
+    '''
+    Apply thresholding to a 1D NumPy array.
+
+    Parameters:
+        arr (numpy.ndarray): The input 1D array to be thresholded.
+        th_val (float): The threshold value. Values below this threshold will be replaced.
+        use_abs (bool, optional): If True, use the absolute value of th_val for thresholding.
+
+    Returns:
+        numpy.ndarray: The thresholded 1D array.
+
+    Notes:
+        If 'use_abs' is True, the absolute value of 'th_val' is used for thresholding.
+        Values in 'arr' that are less than 'th_val' are replaced with 'th_val'.
+
+    Examples:
+        >>> data = np.array([1, 2, 3, 4, 5])
+        >>> threshold_arr_1d(data, 3)
+        array([3, 3, 3, 4, 5])
+        >>> threshold_arr_1d(data, -2, use_abs=True)
+        array([2, 2, 3, 4, 5])
+    '''
+	
     th_val = abs(th_val) if use_abs else th_val
     for i in range(len(arr)):
         if arr[i] < th_val:
@@ -180,20 +158,73 @@ def threshold_arr_1d(arr, th_val, use_abs=False):
     
     
 def threshold_arr_2d(arr, th_val, use_abs=False):
+    '''
+    Apply thresholding to a 2D NumPy array row-wise.
+
+    Parameters:
+        arr (numpy.ndarray): The input 2D array to be thresholded row-wise.
+        th_val (float): The threshold value. Values below this threshold will be replaced.
+        use_abs (bool, optional): If True, use the absolute value of th_val for thresholding.
+
+    Returns:
+        numpy.ndarray: The thresholded 2D array.
+
+    Notes:
+        If 'use_abs' is True, the absolute value of 'th_val' is used for thresholding.
+        Thresholding is applied row-wise to each row in 'arr'.
+
+    Examples:
+        >>> data = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
+        >>> threshold_arr_2d(data, 4)
+        array([[4, 4, 4],
+               [4, 5, 6],
+               [7, 8, 9]])
+        >>> threshold_arr_2d(data, -2, use_abs=True)
+        array([[2, 2, 3],
+               [4, 5, 6],
+               [7, 8, 9]])
+    '''
+	
     for i in range(arr.shape[0]):
         arr[i, :] = threshold_arr_1d(arr[i, :], th_val, use_abs)
     return arr
 
 
 def clip_graph(x_arr, y_arr, x_min=0, x_max=100, y_min=0, y_max=100):  
-    x_mask = (x_arr < x_max) & (x_arr > x_min)
-    x_arr = x_arr[x_mask]
-    y_arr = y_arr[x_mask]
-    
-    y_mask = (y_arr < y_max) & (y_arr > y_min)
-    y_arr = y_arr[y_mask] 
-    x_arr = x_arr[y_mask]
-    
+    '''
+    Clip data points within specified x and y ranges.
+
+    Parameters:
+        x_arr (numpy.ndarray): The x-coordinates of the data points.
+        y_arr (numpy.ndarray): The y-coordinates of the data points.
+        x_min (float, optional): The minimum x-value for clipping.
+        x_max (float, optional): The maximum x-value for clipping.
+        y_min (float, optional): The minimum y-value for clipping.
+        y_max (float, optional): The maximum y-value for clipping.
+
+    Returns:
+        tuple: A tuple containing the clipped x and y arrays.
+
+    Notes:
+        Data points outside the specified ranges [x_min, x_max] and [y_min, y_max] are removed.
+
+    Examples:
+        >>> x = np.array([0, 50, 100, 150, 200])
+        >>> y = np.array([0, 25, 50, 75, 100])
+        >>> clipped_x, clipped_y = clip_graph(x, y, x_min=50, x_max=150, y_min=25, y_max=75)
+        >>> clipped_x
+        array([100])
+        >>> clipped_y
+        array([50])
+    '''
+	
+    x_mask = (x_arr >= x_min) & (x_arr <= x_max)
+    y_mask = (y_arr >= y_min) & (y_arr <= y_max)
+
+    # Apply clipping to both x and y arrays
+    x_arr = x_arr[x_mask & y_mask]
+    y_arr = y_arr[x_mask & y_mask]
+	
     return x_arr, y_arr
 
 
@@ -660,3 +691,158 @@ def open_img(filename, no_mean=True, grayscale=True):
         img -= np.mean(img)
     
     return np.array(img)
+	
+
+###################################################################################################################
+#                                          Latice noise utils                                                     #
+###################################################################################################################
+
+
+def graph_mesh(x_min, x_max, x_step):
+    mesh = np.arange(x_min, x_max + 1, x_step)
+    return mesh
+
+
+def qubic_interp(x):
+    return x * x * (3 - 2 * x)
+
+
+def fifth_order_interp(x):
+    return 6 * x ** 5 - 15 * x ** 4 + 10 * x ** 3
+
+
+def gen_value_noise_1d(outp_noise_size, iterm_mesh_size, octaves_num, persistence, func=None):
+    random_values = []
+    harmonics = []
+    amplitude = persistence
+
+    for _ in range(octaves_num):
+        rv = amplitude * np.random.rand(outp_noise_size // iterm_mesh_size + 1)
+        octave = gen_single_octave_1d(rv, outp_noise_size, iterm_mesh_size, func=func)
+
+        random_values.append(rv)
+        harmonics.append(octave)
+        iterm_mesh_size = iterm_mesh_size // 2
+        amplitude *= persistence
+
+    return harmonics, random_values
+
+
+def gen_single_octave_1d(random_values, size, grid_size, func=None):
+    num_cells_x = size // grid_size
+    noise_map = np.zeros(size + 1)
+
+    for x in range(size):
+        cell_x = x // grid_size
+        local_x = (x % grid_size) / grid_size
+        left = random_values[cell_x]
+        right = random_values[cell_x + 1]
+        smooth_x = func(local_x) if func else local_x
+        interp = left * (1 - smooth_x) + right * smooth_x
+        noise_map[x] += interp
+        
+    noise_map[-1] = random_values[-1]
+    return noise_map
+
+
+def gen_single_octave_2d(random_values, outp_noise_shape, iterm_mesh_shape, func=None):
+    h, w = outp_noise_shape
+    gr_h, gr_w = iterm_mesh_shape
+    num_cells_x = w // gr_w
+    num_cells_y = h // gr_h
+    noise_map = np.zeros((h + 1, w + 1))
+    
+    for y in range(h):
+        for x in range(w):
+            cell_x = x // gr_w
+            cell_y = y // gr_h
+
+            local_x = (x % gr_w) / gr_w
+            local_y = (y % gr_h) / gr_h
+
+            top_left = random_values[cell_y, cell_x]
+            top_right = random_values[cell_y, cell_x + 1]
+            bottom_left = random_values[cell_y + 1, cell_x]
+            bottom_right = random_values[cell_y + 1, cell_x + 1]
+
+            if func is None:
+                smooth_x = local_x
+                smooth_y = local_y
+            else:
+                smooth_x = func(local_x)
+                smooth_y = func(local_y)
+
+            interp_top = top_left * (1 - smooth_x) + top_right * smooth_x
+            interp_bottom = bottom_left * (1 - smooth_x) + bottom_right * smooth_x
+            noise_map[y, x] += interp_top * (1 - smooth_y) + interp_bottom * smooth_y          
+            noise_map[-1, x] = bottom_left * (1 - smooth_x) + bottom_right * smooth_x
+        noise_map[y, -1] = top_right * (1 - smooth_y) + bottom_right * smooth_y
+    noise_map[-1, -1] = random_values[-1, -1]
+    return noise_map
+
+
+def gen_value_noise_2d(outp_noise_shape, iterm_mesh_shape, octave_nums, persistence, func=None):
+    harmonics = []
+    random_values = []
+    h, w = outp_noise_shape
+    gr_h, gr_w = iterm_mesh_shape
+    amplitude = persistence  
+
+    for _ in range(octave_nums):
+        rv = amplitude * np.random.rand(h // gr_h + 1, w // gr_w + 1)
+        octave = gen_single_octave_2d(rv, outp_noise_shape, (gr_h, gr_w), func=func)
+
+        random_values.append(rv)
+        harmonics.append(octave)
+        gr_h, gr_w = gr_h // 2, gr_w // 2
+        amplitude *= persistence
+
+    # noise_map = np.sum(harmonics, axis=0)
+    # noise_map = (noise_map - np.min(noise_map)) / (np.max(noise_map) - np.min(noise_map))
+    return harmonics
+
+
+###################################################################################################################
+#                                                    FFT utils                                                    #
+###################################################################################################################
+
+
+def rmse(arr1, arr2, weight_arr=None, normalize=False):
+    if arr1.shape != arr2.shape:
+        raise ValueError("Shape mismatch between input arrays.")
+    
+    if weight_arr is None:
+        weight_arr = np.ones(arr1.shape)
+    elif arr1.shape != weight_arr.shape:
+        raise ValueError("Shape mismatch between input arrays and weight array.")
+    
+    weight_mean = np.mean(weight_arr) 
+    diff = weight_arr * (arr1 - arr2) ** 2
+    mse = np.sum(diff) / arr1.size
+    mse = mse / weight_mean if normalize else mse
+    return np.sqrt(mse)
+
+
+def print_progress_bar(iteration, total, prefix='', suffix='', decimals = 1, 
+                       length = 100, fill = '█', print_end='\r'):
+    percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
+    filled_length = int(length * iteration // total)
+    bar = fill * filled_length + '-' * (length - filled_length)
+    print(f'\r{prefix} |{bar}| {percent}% {suffix}', end=print_end)
+    # Print New Line on Complete
+    if iteration == total: 
+        print()
+        
+        
+def gaussian(x_vals, y_vals, std):
+    arg = x_vals + y_vals
+    exp = np.exp(-(arg ** 2) / 2 / std)
+    return exp
+
+
+def find_index_by_val(arr, target_val, find_last=True):
+    idx = 0
+    for index, val in enumerate(arr):
+        if val == target_val:
+            idx = index
+    return idx
