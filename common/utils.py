@@ -2,7 +2,6 @@ import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 import numpy as np
 import plotly.graph_objects as go
-import random
 
 from mpl_toolkits.axes_grid1 import make_axes_locatable
 from PIL import Image
@@ -29,7 +28,6 @@ def get_slice(arr, rows, cols):
     Raises:
         ValueError: If the lengths of 'rows' and 'cols' are different.
     '''
-
     if len(rows) != len(cols):
         raise ValueError('Row and column indexes arrays have different sizes')
 
@@ -78,7 +76,6 @@ def normalize(arr, zero_padding=False, offset_coef=0.001):
         >>> normalize(arr, zero_padding=True)
         array([0.  , 0.25, 0.5 , 0.75, 1.  ])
     '''
-
     min_val = np.min(arr)
     max_val = np.max(arr)
     
@@ -115,7 +112,6 @@ def normalize_img(arr):
         array([[  0., 255.],
                [  0., 127.5]])
     '''
-    
     arr_min = np.min(arr)
     arr_max = np.max(arr)
     
@@ -149,7 +145,6 @@ def threshold_arr_1d(arr, th_val, use_abs=False):
         >>> threshold_arr_1d(data, -2, use_abs=True)
         array([2, 2, 3, 4, 5])
     '''
-	
     th_val = abs(th_val) if use_abs else th_val
     for i in range(len(arr)):
         if arr[i] < th_val:
@@ -184,7 +179,6 @@ def threshold_arr_2d(arr, th_val, use_abs=False):
                [4, 5, 6],
                [7, 8, 9]])
     '''
-	
     for i in range(arr.shape[0]):
         arr[i, :] = threshold_arr_1d(arr[i, :], th_val, use_abs)
     return arr
@@ -217,7 +211,6 @@ def clip_graph(x_arr, y_arr, x_min=0, x_max=100, y_min=0, y_max=100):
         >>> clipped_y
         array([50])
     '''
-	
     x_mask = (x_arr >= x_min) & (x_arr <= x_max)
     y_mask = (y_arr >= y_min) & (y_arr <= y_max)
 
@@ -234,54 +227,249 @@ def clip_graph(x_arr, y_arr, x_min=0, x_max=100, y_min=0, y_max=100):
 
 
 def find_ft_1d(arr):
+    '''
+    Calculate the 1D Fourier transform of an array and shift the frequencies to the center.
+
+    Parameters:
+        arr (numpy.ndarray): The input 1D array for Fourier transform.
+
+    Returns:
+        numpy.ndarray: The 1D Fourier transform with shifted frequencies.
+
+    Notes:
+        The function computes the Fourier transform of the input array and shifts the frequencies
+        to center them around zero frequency.
+
+    Examples:
+        >>> data = np.array([1, 2, 3, 4, 5])
+        >>> ft = find_ft_1d(data)
+        >>> ft
+        array([ 7.5       +0.j        , -2.11803399+1.53884177j,
+               -2.11803399-1.53884177j, -2.11803399+0.36327126j,
+               -2.11803399-0.36327126j])
+    '''
     ft = np.fft.fft(arr)
     return np.fft.fftshift(ft)
 
 
 def find_ift_1d(arr):
+    '''
+    Calculate the 1D inverse Fourier transform of an array with shifted frequencies.
+
+    Parameters:
+        arr (numpy.ndarray): The input 1D array with shifted frequencies.
+
+    Returns:
+        numpy.ndarray: The 1D inverse Fourier transform as a real-valued array.
+
+    Notes:
+        The function takes an array with shifted frequencies, performs an inverse Fourier transform,
+        and returns the real part of the result.
+
+    Examples:
+        >>> data = np.array([ 7.5       +0.j        , -2.11803399+1.53884177j,
+        ...                   -2.11803399-1.53884177j, -2.11803399+0.36327126j,
+        ...                   -2.11803399-0.36327126j])
+        >>> ift = find_ift_1d(data)
+        >>> ift
+        array([1., 2., 3., 4., 5.])
+    '''
     ift = np.fft.ifftshift(arr)
     return np.fft.ifft(ift).real
 
 
 def find_ft_2d(arr):
-    ft = np.fft.fft2(arr)
+    '''
+    Calculate the 2D Fourier transform of a 2D array and shift the frequencies to the center.
+
+    Parameters:
+        arr (numpy.ndarray): The input 2D array for Fourier transform.
+
+    Returns:
+        numpy.ndarray: The 2D Fourier transform with shifted frequencies.
+
+    Notes:
+        The function computes the 2D Fourier transform of the input array and shifts the frequencies
+        to center them around zero frequency.
+
+    Examples:
+        >>> data = np.array([[1, 2, 3], [4, 5, 6], [7, 8, 9]])
+        >>> ft = find_ft_2d(data)
+        >>> ft
+        array([[ 0. +0.j,  0. +0.j,  0. +0.j],
+               [ 0.5-1.5j,  0. +0.j, -0.5+1.5j],
+               [ 0. +0.j,  0. +0.j,  0. +0.j]])
+    '''
+	ft = np.fft.fft2(arr)
     return np.fft.fftshift(ft)
 
 
 def find_ift_2d(arr):
-    ift = np.fft.ifftshift(arr)
+    '''
+    Calculate the 2D inverse Fourier transform of a 2D array with shifted frequencies.
+
+    Parameters:
+        arr (numpy.ndarray): The input 2D array with shifted frequencies.
+
+    Returns:
+        numpy.ndarray: The 2D inverse Fourier transform as a real-valued array.
+
+    Notes:
+        The function takes a 2D array with shifted frequencies, performs an inverse Fourier transform,
+        and returns the real part of the result.
+
+    Examples:
+        >>> data = np.array([[ 0. +0.j,  0. +0.j,  0. +0.j],
+        ...                  [ 0.5-1.5j,  0. +0.j, -0.5+1.5j],
+        ...                  [ 0. +0.j,  0. +0.j,  0. +0.j]])
+        >>> ift = find_ift_2d(data)
+        >>> ift
+        array([[1., 2., 3.],
+               [4., 5., 6.],
+               [7., 8., 9.]])
+    '''
+	ift = np.fft.ifftshift(arr)
     return np.fft.ifft2(ift).real
 
 
 def freq_numbers_1d(size):
-    if size % 2:
+    '''
+    Generate a 1D array of frequency numbers centered around zero.
+
+    Parameters:
+        size (int): The number of elements in the output array.
+
+    Returns:
+        numpy.ndarray: A 1D array of frequency numbers.
+
+    Notes:
+        The function generates a 1D array of frequency numbers ranging from
+        -(size // 2) to size // 2 (inclusive), centered around zero.
+
+    Examples:
+        >>> freq_numbers_1d(5)
+        array([-2, -1,  0,  1,  2])
+        >>> freq_numbers_1d(6)
+        array([-2, -1,  0,  1,  2,  3])
+    '''
+	if size % 2:
         return np.arange(-(size // 2), size // 2 + 1, 1) 
     else:
         return np.arange(-(size // 2), size // 2, 1) 
     
 
 def freq_arr_1d(size, step=1):
-    freq = freq_numbers_1d(size) 
+    '''
+    Generate a 1D array of frequencies scaled by a specified step size.
+
+    Parameters:
+        size (int): The number of elements in the output array.
+        step (float, optional): The scaling factor for frequencies (default is 1).
+
+    Returns:
+        numpy.ndarray: A 1D array of scaled frequencies.
+
+    Notes:
+        The function generates a 1D array of frequencies ranging from
+        -(size // 2) to size // 2 (inclusive), centered around zero. The frequencies
+        are then scaled by the specified 'step' value.
+
+    Examples:
+        >>> freq_arr_1d(5)
+        array([-0.4, -0.2,  0. ,  0.2,  0.4])
+        >>> freq_arr_1d(6, step=0.5)
+        array([-0.33333333, -0.16666667,  0.,  0.16666667,  0.33333333, 0.5])
+    '''
+	freq = freq_numbers_1d(size) 
     return freq / step / size
 
 
 def freq_numbers_2d(shape):
-    y_size, x_size = shape
+    '''
+    Generate 2D arrays of frequency numbers centered around zero.
+
+    Parameters:
+        shape (tuple): A tuple specifying the shape of the 2D arrays (y_size, x_size).
+
+    Returns:
+        tuple: A tuple containing 2D arrays of frequency numbers for both x and y axes.
+
+    Notes:
+        The function generates 2D arrays of frequency numbers for both x and y axes, centered
+        around zero. The 'shape' tuple specifies the dimensions of the output arrays.
+
+    Examples:
+        >>> freq_numbers_2d((3, 4))
+        (array([ 0,  0,  0,  0]),
+         array([-1,  0,  1]))
+        >>> freq_numbers_2d((5, 5))
+        (array([-2, -1,  0,  1,  2]),
+         array([-2, -1,  0,  1,  2]))
+    '''
+	y_size, x_size = shape
     y_freq_numbers = freq_numbers_1d(y_size)
     x_freq_numbers = freq_numbers_1d(x_size)
     return x_freq_numbers, y_freq_numbers
     
 
 def freq_arr_2d(shape, x_step=1, y_step=1):
-    y_size, x_size = shape
-    y_freq_numbers, x_freq_numbers = freq_numbers_2d(shape) 
+    '''
+    Generate 2D arrays of scaled frequencies for both x and y axes.
+
+    Parameters:
+        shape (tuple): A tuple specifying the shape of the 2D arrays (y_size, x_size).
+        x_step (float, optional): The scaling factor for the x-axis frequencies (default is 1).
+        y_step (float, optional): The scaling factor for the y-axis frequencies (default is 1).
+
+    Returns:
+        tuple: A tuple containing 2D arrays of scaled frequencies for both x and y axes.
+
+    Notes:
+        The function generates 2D arrays of scaled frequencies for both x and y axes, based on the
+        specified 'shape', 'x_step', and 'y_step' values.
+
+    Examples:
+        >>> freq_arr_2d((3, 4))
+        (array([ 0.,  0.,  0.,  0.]),
+         array([-1.,  0.,  1.]))
+        >>> freq_arr_2d((5, 5), x_step=0.5, y_step=0.25)
+        (array([-2., -1.,  0.,  1.,  2.]),
+         array([-2., -1.,  0.,  1.,  2.]))
+    '''
+	y_size, x_size = shape
+    x_freq_numbers, y_freq_numbers = freq_numbers_2d(shape) 
     x_freq = x_freq_numbers / x_step / x_size
     y_freq = y_freq_numbers / y_step / y_size
-    return y_freq, x_freq
+    return x_freq, y_freq
 	
 	
 def freq_mesh_2d(shape):
-    x_freq_numbers, y_freq_numbers = freq_numbers_2d(shape) 
+    '''
+    Generate 2D mesh grids of frequencies for both x and y axes.
+
+    Parameters:
+        shape (tuple): A tuple specifying the shape of the 2D arrays (y_size, x_size).
+
+    Returns:
+        tuple: A tuple containing 2D mesh grids of frequencies for both x and y axes.
+
+    Notes:
+        The function generates 2D mesh grids of frequencies for both x and y axes, based on the
+        specified 'shape'.
+
+    Examples:
+        >>> freq_mesh_2d((3, 4))
+        (array([[-1,  0,  1,  2],
+                [-1,  0,  1,  2],
+                [-1,  0,  1,  2]]), array([0, 0, 0, 0]))
+        >>> freq_mesh_2d((5, 5))
+        (array([[-2, -1,  0,  1,  2],
+                [-2, -1,  0,  1,  2],
+                [-2, -1,  0,  1,  2],
+                [-2, -1,  0,  1,  2],
+                [-2, -1,  0,  1,  2]]), array([-2, -1,  0,  1,  2]))
+    '''
+	x_freq_numbers, y_freq_numbers = freq_numbers_2d(shape) 
     x_mesh, y_mesh = np.meshgrid(x_freq_numbers, y_freq_numbers)
     return x_mesh, y_mesh
 
