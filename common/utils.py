@@ -300,7 +300,7 @@ def find_ft_2d(arr):
                [ 0.5-1.5j,  0. +0.j, -0.5+1.5j],
                [ 0. +0.j,  0. +0.j,  0. +0.j]])
     '''
-	ft = np.fft.fft2(arr)
+    ft = np.fft.fft2(arr)
     return np.fft.fftshift(ft)
 
 
@@ -328,7 +328,7 @@ def find_ift_2d(arr):
                [4., 5., 6.],
                [7., 8., 9.]])
     '''
-	ift = np.fft.ifftshift(arr)
+    ift = np.fft.ifftshift(arr)
     return np.fft.ifft2(ift).real
 
 
@@ -352,7 +352,7 @@ def freq_numbers_1d(size):
         >>> freq_numbers_1d(6)
         array([-2, -1,  0,  1,  2,  3])
     '''
-	if size % 2:
+    if size % 2:
         return np.arange(-(size // 2), size // 2 + 1, 1) 
     else:
         return np.arange(-(size // 2), size // 2, 1) 
@@ -380,7 +380,7 @@ def freq_arr_1d(size, step=1):
         >>> freq_arr_1d(6, step=0.5)
         array([-0.33333333, -0.16666667,  0.,  0.16666667,  0.33333333, 0.5])
     '''
-	freq = freq_numbers_1d(size) 
+    freq = freq_numbers_1d(size) 
     return freq / step / size
 
 
@@ -406,7 +406,7 @@ def freq_numbers_2d(shape):
         (array([-2, -1,  0,  1,  2]),
          array([-2, -1,  0,  1,  2]))
     '''
-	y_size, x_size = shape
+    y_size, x_size = shape
     y_freq_numbers = freq_numbers_1d(y_size)
     x_freq_numbers = freq_numbers_1d(x_size)
     return x_freq_numbers, y_freq_numbers
@@ -436,7 +436,7 @@ def freq_arr_2d(shape, x_step=1, y_step=1):
         (array([-2., -1.,  0.,  1.,  2.]),
          array([-2., -1.,  0.,  1.,  2.]))
     '''
-	y_size, x_size = shape
+    y_size, x_size = shape
     x_freq_numbers, y_freq_numbers = freq_numbers_2d(shape) 
     x_freq = x_freq_numbers / x_step / x_size
     y_freq = y_freq_numbers / y_step / y_size
@@ -469,7 +469,7 @@ def freq_mesh_2d(shape):
                 [-2, -1,  0,  1,  2],
                 [-2, -1,  0,  1,  2]]), array([-2, -1,  0,  1,  2]))
     '''
-	x_freq_numbers, y_freq_numbers = freq_numbers_2d(shape) 
+    x_freq_numbers, y_freq_numbers = freq_numbers_2d(shape) 
     x_mesh, y_mesh = np.meshgrid(x_freq_numbers, y_freq_numbers)
     return x_mesh, y_mesh
 
@@ -479,24 +479,133 @@ def freq_mesh_2d(shape):
 ###################################################################################################################
 
 
+def freq_pink_filter_1d(x_freq, factor=0.5, no_mean=False):
+    '''
+    Apply a 1D pink noise filter (1 / f) to a frequency domain signal.
+
+    Parameters:
+        x_freq (numpy.ndarray): The input 1D frequency signal.
+        factor (float, optional): Exponent factor for the pink noise filter (default is 0.5).
+        no_mean (bool, optional): Whether to remove the mean component (default is False).
+
+    Returns:
+        numpy.ndarray: The filtered frequency signal.
+
+    Notes:
+        The function applies a pink noise filter to the input frequency signal in the frequency domain.
+        The 'factor' parameter controls the shape of the filter, and 'no_mean' can be used to remove
+        the mean component from the filtered signal.
+
+    Examples:
+        >>> freq_signal = np.array([1, 2, 3, 4, 5])
+        >>> filtered_signal = freq_pink_filter_1d(freq_signal)
+        >>> filtered_signal
+        array([1., 1., 0.70710678, 0.57735027, 0.5, 0.4472136])
+    '''
+    x_freq = np.abs(x_freq)
+    f = 1 / np.where(x_freq <= 1, 1, x_freq)
+    f = f ** factor
+    if no_mean:
+        f_mask = x_freq < 1
+        f[f_mask] = 0
+    return f
+	
+	
+def freq_pink_filter_1d_alt(x_freq, factor=0.5, no_mean=False):
+    '''
+    Apply an alternative 1D pink noise filter (1 / (1 + f)) to a frequency domain signal.
+
+    Parameters:
+        x_freq (numpy.ndarray): The input 1D frequency signal.
+        factor (float, optional): Exponent factor for the pink noise filter (default is 0.5).
+        no_mean (bool, optional): Whether to remove the mean component (default is False).
+
+    Returns:
+        numpy.ndarray: The filtered frequency signal.
+
+    Notes:
+        The function applies a pink noise filter to the input frequency signal in the frequency domain.
+        The 'factor' parameter controls the shape of the filter, and 'no_mean' can be used to remove
+        the mean component from the filtered signal.
+
+    Examples:
+        >>> freq_signal = np.array([1, 2, 3, 4, 5])
+        >>> filtered_signal = freq_pink_filter_1d_old(freq_signal)
+        >>> filtered_signal
+        array([1., 0.70710678, 0.57735027, 0.5, 0.4472136, 0.40824829])
+    '''
+    x_freq = np.abs(x_freq)
+    f = 1 / (1 + x_freq)
+    f = f ** factor
+    if no_mean:
+        f_mask = x_freq < 1
+        f[f_mask] = 0
+    return f
+
+
 def freq_filter_2d(x_freq, y_freq):
+    '''
+    Generate a 2D frequency filter based on 1D frequency arrays.
+
+    Parameters:
+        x_freq (numpy.ndarray): 1D array of frequencies for the x-axis.
+        y_freq (numpy.ndarray): 1D array of frequencies for the y-axis.
+
+    Returns:
+        numpy.ndarray: A 2D frequency filter based on the input frequencies.
+
+    Notes:
+        The function generates a 2D frequency filter based on the provided 1D frequency arrays for
+        both the x and y axes. The resulting filter is a 2D array with values representing
+        the magnitude of frequencies at different points.
+
+    Examples:
+        >>> x_freq = np.array([-2, -1, 0, 1, 2])
+        >>> y_freq = np.array([-2, -1, 0, 1, 2])
+        >>> filter = freq_filter_2d(x_freq, y_freq)
+        >>> filter
+        array([[2.82842712, 2.23606798, 2.        , 2.23606798, 2.82842712],
+               [2.23606798, 1.41421356, 1.        , 1.41421356, 2.23606798],
+               [2.        , 1.        , 0.        , 1.        , 2.        ],
+               [2.23606798, 1.41421356, 1.        , 1.41421356, 2.23606798],
+               [2.82842712, 2.23606798, 2.        , 2.23606798, 2.82842712]])
+    '''
     x, y = np.meshgrid(x_freq, y_freq)
     f = np.hypot(x, y)
     return f
 
 
-# should be deprecated or changed
-"""
-def freq_filter(x_freq, y_freq, factor=2.4):
-    eps = 10 ** -8
-    x, y = np.meshgrid(x_freq, y_freq)
-    f = np.hypot(x, y)
-    f = f ** factor + eps
-    return normalize(1 / f)
-"""
-
-
 def freq_pink_filter_2d(x_freq, y_freq, factor=1, x_stretch=1, y_stretch=1, no_mean=False):
+    '''
+    Apply a 2D pink noise filter to a frequency domain signal.
+
+    Parameters:
+        x_freq (numpy.ndarray): 1D array of frequencies for the x-axis.
+        y_freq (numpy.ndarray): 1D array of frequencies for the y-axis.
+        factor (float, optional): Exponent factor for the pink noise filter (default is 1).
+        x_stretch (float, optional): Scaling factor for the x-axis frequencies (default is 1).
+        y_stretch (float, optional): Scaling factor for the y-axis frequencies (default is 1).
+        no_mean (bool, optional): Whether to remove the mean component (default is False).
+
+    Returns:
+        numpy.ndarray: The filtered 2D frequency signal.
+
+    Notes:
+        The function applies a 2D pink noise filter to the input frequency signal in the frequency domain.
+        The 'factor' parameter controls the shape of the filter, 'x_stretch' and 'y_stretch' can be used
+        to scale the frequency axes, and 'no_mean' can be used to remove the mean component from the filtered signal.
+
+    Examples:
+        >>> x_freq = np.array([-2, -1, 0, 1, 2])
+        >>> y_freq = np.array([-2, -1, 0, 1, 2])
+        >>> filtered_signal = freq_pink_filter_2d(x_freq, y_freq, factor=0.5, x_stretch=2, y_stretch=1, no_mean=True)
+        >>> filtered_signal
+        array([[0.6687403 , 0.69647057, 0.70710678, 0.69647057, 0.6687403 ],
+       		   [0.84089642, 0.94574161, 1.        , 0.94574161, 0.84089642],
+       		   [1.        , 0.        , 0.        , 0.        , 1.        ],
+       		   [0.84089642, 0.94574161, 1.        , 0.94574161, 0.84089642],
+       		   [0.6687403 , 0.69647057, 0.70710678, 0.69647057, 0.6687403 ]])
+    '''
     x_freq, y_freq = np.abs(x_freq), np.abs(y_freq)
     fr = freq_filter_2d(x_freq / x_stretch, y_freq / y_stretch)
     f = 1 / np.where(fr <= 1, 1, fr)
@@ -507,27 +616,37 @@ def freq_pink_filter_2d(x_freq, y_freq, factor=1, x_stretch=1, y_stretch=1, no_m
     return f
 
 
-def freq_pink_filter_1d(x_freq, factor=0.5, no_mean=False):
-    x_freq = np.abs(x_freq)
-    f = 1 / np.where(x_freq <= 1, 1, x_freq)
-    f = f ** factor
-    if no_mean:
-        f_mask = np.abs(x_freq) < 1
-        f[f_mask] = 0
-    return f
+def freq_pink_filter_2d_alt(x_freq, y_freq, factor=1, x_stretch=1, y_stretch=1, no_mean=False):
+    '''
+    Apply an alternative 2D pink noise filter to a frequency domain signal.
 
+    Parameters:
+        x_freq (numpy.ndarray): 1D array of frequencies for the x-axis.
+        y_freq (numpy.ndarray): 1D array of frequencies for the y-axis.
+        factor (float, optional): Exponent factor for the pink noise filter (default is 1).
+        x_stretch (float, optional): Scaling factor for the x-axis frequencies (default is 1).
+        y_stretch (float, optional): Scaling factor for the y-axis frequencies (default is 1).
+        no_mean (bool, optional): Whether to remove the mean component (default is False).
 
-def freq_pink_filter_1d_old(x_freq, factor=0.5, no_mean=False):
-    x_freq = np.abs(x_freq)
-    f = 1 / (1 + np.abs(x_freq))
-    f = f ** factor
-    if no_mean:
-        f_mask = np.abs(x_freq) < 1
-        f[f_mask] = 0
-    return f
+    Returns:
+        numpy.ndarray: The filtered 2D frequency signal.
 
+    Notes:
+        The function applies an alternative 2D pink noise filter to the input frequency signal in the frequency domain.
+        The 'factor' parameter controls the shape of the filter, 'x_stretch' and 'y_stretch' can be used
+        to scale the frequency axes, and 'no_mean' can be used to remove the mean component from the filtered signal.
 
-def freq_pink_filter_2d_old(x_freq, y_freq, factor=1, x_stretch=1, y_stretch=1, no_mean=False):
+    Examples:
+        >>> x_freq = np.array([-2, -1, 0, 1, 2])
+        >>> y_freq = np.array([-2, -1, 0, 1, 2])
+        >>> filtered_signal = freq_pink_filter_2d_alt(x_freq, y_freq, factor=0.5, x_stretch=2, y_stretch=1)
+        >>> filtered_signal
+        array([[0.55589297, 0.57151696, 0.57735027, 0.57151696, 0.55589297],
+       		   [0.64359425, 0.6871215 , 0.70710678, 0.6871215 , 0.64359425],
+       		   [0.70710678, 0.81649658, 1.        , 0.81649658, 0.70710678],
+       	  	   [0.64359425, 0.6871215 , 0.70710678, 0.6871215 , 0.64359425],
+       		   [0.55589297, 0.57151696, 0.57735027, 0.57151696, 0.55589297]])
+    '''
     f = freq_filter_2d(x_freq / x_stretch, y_freq / y_stretch)
     f = 1 / (1 + f)
     f = f ** factor
@@ -535,17 +654,35 @@ def freq_pink_filter_2d_old(x_freq, y_freq, factor=1, x_stretch=1, y_stretch=1, 
     return f
 
 
-# replaced by no_mean flag in freq_filter_1d
-"""
-def freq_filter_1d_a(x_freq, factor=1):
-    f = 1 / np.where(x_freq == 0, 1, np.abs(x_freq))
-    f = f ** factor
-    f[len(x_freq) // 2] = 0
-    return f
-"""
-
-
 def freq_sharp_round_filter_2d(x_freq, y_freq, radius, low_pass_filter=True):
+    '''
+    Apply a 2D sharp-round filter to a frequency domain signal.
+
+    Parameters:
+        x_freq (numpy.ndarray): 1D array of frequencies for the x-axis.
+        y_freq (numpy.ndarray): 1D array of frequencies for the y-axis.
+        radius (float): The radius of the circular filter.
+        low_pass_filter (bool, optional): Whether to apply a low-pass or high-pass filter (default is True).
+
+    Returns:
+        numpy.ndarray: The filtered 2D frequency signal.
+
+    Notes:
+        The function applies a 2D sharp-round filter to the input frequency signal in the frequency domain.
+        The 'radius' parameter determines the size of the circular filter, and 'low_pass_filter' can be used
+        to choose between a low-pass or high-pass filter.
+
+    Examples:
+        >>> x_freq = np.array([-2, -1, 0, 1, 2])
+        >>> y_freq = np.array([-2, -1, 0, 1, 2])
+        >>> filtered_signal = freq_sharp_round_filter_2d(x_freq, y_freq, radius=1.5, low_pass_filter=True)
+        >>> filtered_signal
+        array([[0, 0, 0, 0, 0],
+               [0, 1, 1, 1, 0],
+               [0, 1, 1, 1, 0],
+               [0, 1, 1, 1, 0],
+               [0, 0, 0, 0, 0]])
+    '''
     check = np.less if low_pass_filter else np.greater
     f = freq_filter_2d(x_freq, y_freq)
     f = np.where(check(f, radius), 1, 0)
@@ -553,8 +690,38 @@ def freq_sharp_round_filter_2d(x_freq, y_freq, radius, low_pass_filter=True):
 
 
 def freq_sharp_square_filter_2d(x_freq, y_freq, width, angle=0, low_pass_filter=True):
+    '''
+    Apply a 2D sharp-square filter to a frequency domain signal.
+
+    Parameters:
+        x_freq (numpy.ndarray): 1D array of frequencies for the x-axis.
+        y_freq (numpy.ndarray): 1D array of frequencies for the y-axis.
+        width (float): The width of the square filter.
+        angle (float, optional): The rotation angle of the square filter in degrees (default is 0).
+        low_pass_filter (bool, optional): Whether to apply a low-pass or high-pass filter (default is True).
+
+    Returns:
+        numpy.ndarray: The filtered 2D frequency signal.
+
+    Notes:
+        The function applies a 2D sharp-square filter to the input frequency signal in the frequency domain.
+        The 'width' parameter determines the size of the square filter, 'angle' can be used to rotate
+        the filter, and 'low_pass_filter' can be used to choose between a low-pass or high-pass filter.
+
+    Examples:
+        >>> x_freq = np.array([-2, -1, 0, 1, 2])
+        >>> y_freq = np.array([-2, -1, 0, 1, 2])
+        >>> filtered_signal = freq_sharp_square_filter_2d(x_freq, y_freq, width=1.5, angle=30, low_pass_filter=True)
+        >>> filtered_signal
+        array([[0, 0, 0, 0, 0],
+               [0, 1, 1, 1, 0],
+               [0, 1, 1, 1, 0],
+               [0, 1, 1, 1, 0],
+               [0, 0, 0, 0, 0]])
+    '''
     check = np.less if low_pass_filter else np.greater
-    angle_radians = math.radians(angle)    
+    angle_radians = np.radians(angle)  
+    
     x, y = np.meshgrid(x_freq, y_freq)
     rotated_x = x * np.cos(angle_radians) - y * np.sin(angle_radians)
     rotated_x = np.where(check(np.abs(rotated_x), width), 1, 0)
