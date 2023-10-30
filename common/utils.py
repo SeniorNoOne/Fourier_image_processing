@@ -734,22 +734,74 @@ def freq_sharp_square_filter_2d(x_freq, y_freq, width, angle=0, low_pass_filter=
 
 
 ###################################################################################################################
-#                                           Spatial domain utils (NOT REWORKED)                                   #
+#                                                 Spatial domain utils                                            #
 ###################################################################################################################
 
 
 def spatial_smooth_filter(x_size, y_size, depth, horiz=True):
+    '''
+    Generate a 2D spatial smoothing filter.
+
+    Parameters:
+        x_size (int): The width of the filter.
+        y_size (int): The height of the filter.
+        depth (int): The depth of the filter.
+        horiz (bool, optional): Whether to create a horizontal or vertical filter (default is True).
+
+    Returns:
+        numpy.ndarray: A 2D spatial smoothing filter.
+
+    Notes:
+        The function generates a 2D spatial smoothing filter with the specified dimensions.
+        The 'depth' parameter controls the number of levels in the filter, and 'horizontal'
+        determines whether the filter is horizontal (if True) or vertical (if False).
+
+    Examples:
+        >>> x_size = 5
+        >>> y_size = 3
+        >>> depth = 4
+        >>> horizontal_filter = spatial_smooth_filter(x_size, y_size, depth, horiz=True)
+        >>> horizontal_filter
+        array([[1.        , 0.79012346, 0.20987654, 0.],
+               [1.        , 0.79012346, 0.20987654, 0.],
+               [1.        , 0.79012346, 0.20987654, 0.]])
+    '''
     values = np.linspace(0, 1, depth)
-    values = 6 * values ** 5 - 15 * values ** 4 + 10 * values ** 3
-    values = 1 - values
+    values = 1 - fifth_order_interp(values)
+
     if horiz:
         kernel = np.tile(values, (y_size, 1))
     else:
-        kernel = values[:, np.newaxis] * np.ones((1, x_size))   
+        kernel = values[:, np.newaxis] * np.ones((1, x_size))
+    
     return kernel
 
 
 def make_img_transition_x(img, depth, is_dx_pos=True, outter_smooth=False):
+    '''
+    Create an image with a smooth transition in the x-direction.
+
+    Parameters:
+        img (numpy.ndarray): The input image.
+        depth (int): The depth of the x-direction transition region.
+        is_dx_pos (bool, optional): Whether the transition is in the positive x-direction (default is True).
+        outer_smooth (bool, optional): Whether to apply outer smoothing to the transition (default is False).
+
+    Returns:
+        numpy.ndarray: The image with the x-direction transition.
+
+    Notes:
+        The function creates an image with a transition in the x-direction. The 'depth' parameter controls
+        the width of the transition, 'is_dx_pos' determines whether the transition is in the positive
+        x-direction, and 'outer_smooth' can be used to apply outer smoothing to the transition region.
+
+    Examples:
+        >>> input_img = np.random.normal(0, 1, (3, 3))
+        >>> depth = 2
+        >>> is_dx_pos = True
+        >>> outer_smooth = False
+        >>> output_img = make_img_transition_x(input_img, depth, is_dx_pos, outer_smooth)
+    '''
     y_size, x_size = img.shape
     add_img = gen_cloud(x_size + depth, y_size)   
     transition_kernel = spatial_smooth_filter(x_size, y_size, depth)     
@@ -778,6 +830,30 @@ def make_img_transition_x(img, depth, is_dx_pos=True, outter_smooth=False):
     
 
 def make_img_transition_y(img, depth, is_dy_pos=True, outter_smooth=False):
+    '''
+    Create an image with a transition in the y-direction.
+
+    Parameters:
+        img (numpy.ndarray): The input image.
+        depth (int): The depth of the y-direction transition.
+        is_dy_pos (bool, optional): Whether the transition is in the positive y-direction (default is True).
+        outer_smooth (bool, optional): Whether to apply outer smoothing to the transition (default is False).
+
+    Returns:
+        numpy.ndarray: The image with the y-direction transition.
+
+    Notes:
+        The function creates an image with a transition in the y-direction. The 'depth' parameter controls
+        the height of the transition, 'is_dy_pos' determines whether the transition is in the positive
+        y-direction, and 'outer_smooth' can be used to apply outer smoothing to the transition region.
+
+    Examples:
+        >>> input_img = np.random.normal(0, 1, (3, 3))
+        >>> depth = 2
+        >>> is_dy_pos = True
+        >>> outer_smooth = False
+        >>> output_img = make_img_transition_y(input_img, depth, is_dy_pos, outer_smooth)
+    '''
     y_size, x_size = img.shape
     add_img = gen_cloud(x_size, y_size + depth)   
     transition_kernel = spatial_smooth_filter(x_size, y_size, depth, horiz=False)
@@ -806,38 +882,134 @@ def make_img_transition_y(img, depth, is_dy_pos=True, outter_smooth=False):
 
 
 def make_img_transition_xy(img, depth, is_dx_pos=True, is_dy_pos=True, outter_smooth=False):
-    new_img = make_img_transition_x(img, depth, is_dx_pos=is_dx_pos, outter_smooth=outter_smooth)
-    new_img = make_img_transition_y(new_img, depth, is_dy_pos=is_dy_pos, outter_smooth=outter_smooth)
+    '''
+    Create an image with transitions in both the x and y directions.
+
+    Parameters:
+        img (numpy.ndarray): The input image.
+        depth (int): The depth of the transitions.
+        is_dx_pos (bool, optional): Whether the x-direction transition is in the positive x-direction (default is True).
+        is_dy_pos (bool, optional): Whether the y-direction transition is in the positive y-direction (default is True).
+        outer_smooth (bool, optional): Whether to apply outer smoothing to the transitions (default is False).
+
+    Returns:
+        numpy.ndarray: The image with transitions in both the x and y directions.
+
+    Notes:
+        The function creates an image with transitions in both the x and y directions.
+        The 'depth' parameter controls the width and height of the transitions, 'is_dx_pos' and 'is_dy_pos'
+        determine the direction of the x and y transitions, and 'outer_smooth' can be used to apply
+        outer smoothing to the transition regions.
+
+    Examples:
+        >>> input_img = np.random.normal(0, 1, (3, 3))
+        >>> depth = 2
+        >>> is_dx_pos = True
+        >>> is_dy_pos = True
+        >>> outer_smooth = False
+        >>> output_img = make_img_transition_xy(input_img, depth, is_dx_pos, is_dy_pos, outer_smooth)
+    '''
+    new_img = make_img_transition_x(img, depth, is_dx_pos=is_dx_pos, outer_smooth=outer_smooth)
+    new_img = make_img_transition_y(new_img, depth, is_dy_pos=is_dy_pos, outer_smooth=outer_smooth)
     return new_img
 
 
 def shift_img_x(img, dx, is_dx_pos=True): 
+    '''
+    Shift an image horizontally in the x-direction.
+
+    Parameters:
+        img (numpy.ndarray): The input image.
+        dx (int): The amount of horizontal shift.
+        is_dx_pos (bool, optional): Whether the shift is in the positive x-direction (default is True).
+
+    Returns:
+        numpy.ndarray: The image shifted in the x-direction.
+
+    Notes:
+        The function shifts an input image horizontally in the x-direction by the specified amount 'dx'.
+        The 'is_dx_pos' parameter determines whether the shift is in the positive x-direction (right) or
+        negative x-direction (left).
+
+    Examples:
+        >>> input_img = np.random.normal(0, 1, (3, 5))
+        >>> dx = 2
+        >>> is_dx_pos = True
+        >>> shifted_img = shift_img_x(input_img, dx, is_dx_pos)
+    '''
     _, width = img.shape
     
-    # Wind blows in negative X dirrection
     if is_dx_pos:
         c1 = img[:, -dx:]
         c2 = img[:, :-dx]
     else:
         c1 = img[:, dx:]
         c2 = img[:, :dx]
+    
     return np.concatenate((c1, c2), axis=1)
 
 
 def shift_img_y(img, dy, is_dy_pos=True):
+    '''
+    Shift an image vertically in the y-direction.
+
+    Parameters:
+        img (numpy.ndarray): The input image.
+        dy (int): The amount of vertical shift.
+        is_dy_pos (bool, optional): Whether the shift is in the positive y-direction (default is True).
+
+    Returns:
+        numpy.ndarray: The image shifted in the y-direction.
+
+    Notes:
+        The function shifts an input image vertically in the y-direction by the specified amount 'dy'.
+        The 'is_dy_pos' parameter determines whether the shift is in the positive y-direction (down) or
+        negative y-direction (up).
+
+    Examples:
+        >>> input_img = np.random.normal(0, 1, (3, 5))
+        >>> dy = 2
+        >>> is_dy_pos = True
+        >>> shifted_img = shift_img_y(input_img, dy, is_dy_pos)
+    '''
     height, _ = img.shape
     
-    # Wind blows in negative Y dirrection
     if is_dy_pos:
         c1 = img[-dy:, :]
         c2 = img[:-dy, :]
     else:
         c1 = img[dy:, :]
         c2 = img[:dy, :]
+    
     return np.concatenate((c1, c2), axis=0)
 
     
 def shift_img_xy(img, dx, dy, is_dx_pos=True, is_dy_pos=True):
+    '''
+    Shift an image both horizontally and vertically.
+
+    Parameters:
+        img (numpy.ndarray): The input image.
+        dx (int): The amount of horizontal shift.
+        dy (int): The amount of vertical shift.
+        is_dx_pos (bool, optional): Whether the x-direction shift is in the positive x-direction (default is True).
+        is_dy_pos (bool, optional): Whether the y-direction shift is in the positive y-direction (default is True).
+
+    Returns:
+        numpy.ndarray: The image shifted both horizontally and vertically.
+
+    Notes:
+        The function shifts an input image both horizontally and vertically by the specified amounts 'dx' and 'dy'.
+        The 'is_dx_pos' and 'is_dy_pos' parameters determine the directions of the shifts.
+
+    Examples:
+        >>> input_img = np.random.normal(0, 1, (3, 5))
+        >>> dx = 2
+        >>> dy = 1
+        >>> is_dx_pos = True
+        >>> is_dy_pos = True
+        >>> shifted_img = shift_img_xy(input_img, dx, dy, is_dx_pos, is_dy_pos)
+    '''
     height, width = img.shape
     shifted_img = shift_img_x(img, dx, is_dx_pos=is_dx_pos)
     shifted_img = shift_img_y(shifted_img, dy, is_dy_pos=is_dy_pos)
