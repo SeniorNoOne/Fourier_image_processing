@@ -276,6 +276,35 @@ def find_ift_1d(arr):
     '''
     ift = np.fft.ifftshift(arr)
     return np.fft.ifft(ift).real
+	
+	
+def adjust_spectrum_1d(img):
+    """
+    Adjust a 1D spectrum array to maintain symmetry for Fourier transform processing.
+
+    This function checks if the length of the input array (spectrum) is even. If it is,
+    the absolute value of the first element is appended to the array to ensure symmetry.
+    This is particularly useful in the context of Fourier transforms where symmetric
+    spectra are often required.
+
+    Parameters:
+    img (numpy.ndarray): The 1D spectrum array obtained from a Fourier transform.
+
+    Returns:
+    numpy.ndarray: The adjusted spectrum array, ensuring symmetry if the original length is even.
+
+    Example:
+    >>> spectrum = np.array([-2, -1, 0, 1])
+    >>> adjusted_spectrum = adjust_spectrum_1d(spectrum)
+    >>> print(adjusted_spectrum)  # Output for even length: [-2 -1  0  1  2]
+    >>> odd_spectrum = np.array([-2, -1, 0, 1, 2])
+    >>> adjusted_odd_spectrum = adjust_spectrum_1d(odd_spectrum)
+    >>> print(adjusted_odd_spectrum)  # Output for odd length: [-2 -1  0  1  2]
+    """
+    if len(img) % 2:
+        return img
+    else:
+        return np.append(img, abs(img[0]))
 
 
 def find_ft_2d(arr):
@@ -909,8 +938,8 @@ def make_img_transition_xy(img, depth, is_dx_pos=True, is_dy_pos=True, outter_sm
         >>> outer_smooth = False
         >>> output_img = make_img_transition_xy(input_img, depth, is_dx_pos, is_dy_pos, outer_smooth)
     '''
-    new_img = make_img_transition_x(img, depth, is_dx_pos=is_dx_pos, outer_smooth=outer_smooth)
-    new_img = make_img_transition_y(new_img, depth, is_dy_pos=is_dy_pos, outer_smooth=outer_smooth)
+    new_img = make_img_transition_x(img, depth, is_dx_pos=is_dx_pos, outter_smooth=outter_smooth)
+    new_img = make_img_transition_y(new_img, depth, is_dy_pos=is_dy_pos, outter_smooth=outter_smooth)
     return new_img
 
 
@@ -1017,24 +1046,311 @@ def shift_img_xy(img, dx, dy, is_dx_pos=True, is_dy_pos=True):
 
 
 ###################################################################################################################
-#                                                Other (NOT REWORKED)                                             #
+#                                                Other                                         			          #
 ###################################################################################################################
 
 
 def normalize_psd(original_magn, modified_magn):
-    original_psd = original_magn ** 2
-    modified_psd = modified_magn ** 2
-    psd_coef = np.sum(original_psd) / np.sum(modified_psd)
-    return psd_coef ** 0.5
+    """
+    Calculate the normalization coefficient for power spectral densities (PSD).
+
+    This function computes the normalization factor needed to adjust the PSD of 
+    a modified signal (represented by its magnitudes) to match the PSD of the original signal.
+
+    Parameters:
+    original_magn (array_like): Magnitudes of the original signal.
+    modified_magn (array_like): Magnitudes of the modified signal.
+
+    Returns:
+    float: The square root of the ratio of the sum of squares of original magnitudes
+           to the sum of squares of modified magnitudes.
+    """
+    original_psd_sum = np.sum(original_magn ** 2)
+    modified_psd_sum = np.sum(modified_magn ** 2)
+    psd_coef = original_psd_sum / modified_psd_sum
+    return np.sqrt(psd_coef)
 
 
-def fit_clement_new(x_freq, y_freq, alpha1, eta=0.1, angle=1):
-    x, y = np.meshgrid(x_freq, y_freq)
-    f = np.hypot(x, y)
-    fp = abs(y - angle * x)
-    f = np.sqrt((1 - eta) * f ** 2 + eta * fp ** 2)    
-    f = 1 / ((1 + abs(f)) ** alpha1)
-    return f
+def show_images(*images, vrange=None, figsize=(10, 10), cmap='gray', aspect='equal', graphs_per_row=2):
+    """
+    Display multiple images in a grid layout using Matplotlib.
+
+    Parameters:
+    images (array_like): Variable number of images to display.
+    vrange (tuple, optional): Range of values for normalizing luminance data (vmin, vmax).
+    figsize (tuple, optional): Size of the figure (width, height in inches). Default is (10, 10).
+    cmap (str, optional): Colormap used for displaying images. Default is 'gray'.
+    graphs_per_row (int, optional): Number of images to display per row. Default is 2.
+
+    Returns:
+    tuple: A tuple containing the figure and axes array created by plt.subplots.
+
+    Example:
+    >>> img1 = np.random.rand(100, 100)
+    >>> img2 = np.random.rand(100, 100)
+    >>> f, axes = show_images(img1, img2, graphs_per_row=2)
+    >>> plt.show()  # This will display two images side by side.
+    """
+    total_images = len(images)
+    row_num = total_images // graphs_per_row + bool(total_images % graphs_per_row)
+    col_num = total_images // row_num + bool(total_images % row_num)
+
+    f, axes = plt.subplots(row_num, col_num, figsize=figsize)
+    axes = np.array(axes).reshape(-1)  
+    
+    for index, ax in enumerate(axes):
+        if index < total_images:
+            display_params = {'cmap': cmap, 'aspect': aspect}
+            if vrange:
+                display_params.update({'vmin': vrange[0], 'vmax': vrange[1]})
+            im = ax.imshow(images[index], **display_params)
+
+            divider = make_axes_locatable(ax)
+            cax = divider.append_axes('right', size='5%', pad=0.05)
+            plt.colorbar(im, cax=cax)
+        else:
+            ax.axis('off')
+    
+    plt.tight_layout()
+    return f, axes
+
+    
+def show_surfaces(*surfaces, axes=None, vrange=None, colorscale='Thermal', showscale=True):
+    """
+    Plot multiple 3D surfaces using Plotly, with options for custom axes, color range, and color scale.
+
+    Parameters:
+    surfaces (array_like): Variable number of surfaces to plot. Each surface can be a tuple (x, y, z) or just z.
+    axes (tuple, optional): Tuple of x and y axes if only z values are provided in surfaces. Default is None.
+    vrange (tuple, optional): Color range for the surfaces as (min, max). If not provided, it's auto-calculated. Default is None.
+    colorscale (str, optional): Color scale name for the surfaces. Default is 'Thermal'.
+    showscale (bool, optional): Whether to show the color scale. Default is True.
+
+    Returns:
+    plotly.graph_objs._figure.Figure: A Plotly figure containing the surface plots.
+
+    Example:
+    >>> x = np.outer(np.linspace(-2, 2, 30), np.ones(30))
+    >>> y = x.copy().T
+    >>> z = np.cos(x ** 2 + y ** 2)
+    >>> fig = show_surfaces((x, y, z), vrange=(-1, 1), colorscale='Viridis')
+    >>> fig.show()  # Displays a 3D surface plot with the Viridis color scale.
+    """
+    if vrange:
+        cmin, cmax = vrange
+    else:
+        z_data = surfaces if axes else [surf[-1] for surf in surfaces]
+        cmin, cmax = np.min(z_data), np.max(z_data)
+    
+    fig = go.Figure()
+    for surf in surfaces:
+        x, y, z = (*axes, surf) if axes else surf
+        fig.add_trace(go.Surface(x=x, y=y, z=z, cmin=cmin, cmax=cmax, colorscale=colorscale, showscale=showscale))
+        showscale = False  # Turn off showscale for subsequent surfaces
+    return fig
+    
+	
+def plot_graphs(*graphs, ax=None, figsize=None, grid=False, xlabel='', ylabel='', title=''):
+    """
+    Plot multiple graphs on a single Matplotlib axes.
+
+    This function allows plotting multiple graphs, either as individual data series or as 
+    (x, y) pairs. It provides options for customizing the figure size, grid, labels, and title.
+
+    Parameters:
+    graphs (array_like): Variable number of graphs to plot. Each graph can be a data series or a tuple/list of (x, y).
+    ax (matplotlib.axes.Axes, optional): Axes object on which to plot the graphs. If None, a new figure and axes are created.
+    figsize (tuple, optional): Size of the figure (width, height in inches). If None, default size is used.
+    grid (bool, optional): Whether to display a grid. Default is False.
+    xlabel (str, optional): Label for the x-axis. Default is an empty string.
+    ylabel (str, optional): Label for the y-axis. Default is an empty string.
+    title (str, optional): Title of the plot. Default is an empty string.
+
+    Returns:
+    matplotlib.axes.Axes: The axes object with the plotted graphs.
+
+    Example:
+    >>> x = range(10)
+    >>> y1 = [i**2 for i in x]
+    >>> y2 = [i**3 for i in x]
+    >>> ax = plot_graphs((x, y1), (x, y2), xlabel='X-axis', ylabel='Y-axis', title='Example Plot')
+    >>> plt.show()  # Displays the plot with two graphs.
+    """
+    if ax is None:
+        fig, ax = plt.subplots(figsize=figsize)
+        
+    for graph in graphs:        
+        ax.plot(*graph) if isinstance(graph, (list, tuple)) else ax.plot(graph)
+    
+    ax.grid(grid)
+    ax.set_xlabel(xlabel)
+    ax.set_ylabel(ylabel)
+    ax.set_title(title) 
+    return ax
+
+
+def open_img(filename, no_mean=True, grayscale=True):
+    """
+    Open an image file, with options to convert it to grayscale and subtract its mean.
+
+    This function loads an image from a specified file, optionally converts it to grayscale,
+    and subtracts the mean pixel value across the image if specified.
+
+    Parameters:
+    filename (str): Path to the image file.
+    no_mean (bool, optional): If True, subtracts the mean pixel value from the image. Default is True.
+    grayscale (bool, optional): If True, converts the image to grayscale. Default is True.
+
+    Returns:
+    numpy.ndarray: The processed image as a NumPy array.
+
+    Example:
+    >>> img_array = open_img('path/to/image.jpg', no_mean=False, grayscale=True)
+    >>> print(img_array.shape)  # Prints the shape of the grayscale image array.
+    """
+    img = Image.open(filename)
+    img_array = np.array(img, dtype=float) 
+    
+    if grayscale:
+        img_array = img.convert('L')
+
+    if no_mean:
+        img_array -= np.mean(img_array)
+    
+    return img_array
+
+
+def rmse(arr1, arr2, weight_arr=None, normalize=False):
+    """
+    Calculate the Root Mean Squared Error (RMSE) between two arrays.
+
+    This function computes the RMSE between two input arrays, with an option to apply 
+    weights to the calculation. If normalization is enabled, the RMSE is normalized 
+    by the mean of the weights.
+
+    Parameters:
+    arr1 (numpy.ndarray): First input array.
+    arr2 (numpy.ndarray): Second input array, must be the same shape as arr1.
+    weight_arr (numpy.ndarray, optional): Weights for each element in arr1 and arr2. Default is equal weights.
+    normalize (bool, optional): If True, normalizes the RMSE by the mean of the weights. Default is False.
+
+    Returns:
+    float: The computed RMSE value.
+
+    Raises:
+    ValueError: If the shapes of arr1, arr2, and weight_arr (if provided) do not match.
+
+    Example:
+    >>> arr1 = np.array([1, 2, 3])
+    >>> arr2 = np.array([1, 3, 5])
+    >>> print(rmse(arr1, arr2))  # Basic RMSE calculation without weights.
+    """
+    if arr1.shape != arr2.shape:
+        raise ValueError("Shape mismatch between input arrays.")
+    
+    if weight_arr is None:
+        weight_arr = np.ones_like(arr1)
+    elif arr1.shape != weight_arr.shape:
+        raise ValueError("Shape mismatch between input arrays and weight array.")
+		
+    diff = weight_arr * (arr1 - arr2) ** 2
+    mse = np.sum(diff) / arr1.size
+    mse = mse / np.mean(weight_arr) if normalize else mse
+    return np.sqrt(mse)
+
+
+def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1, 
+                       length=100, fill='█', print_end='\r'):
+    """
+    Print a dynamic progress bar in the console.
+
+    This function generates a text-based progress bar, useful for tracking the progress
+    of iterative processes. It supports customization of its appearance and format.
+
+    Parameters:
+    iteration (int): Current iteration (should be <= total).
+    total (int): Total iterations.
+    prefix (str, optional): Prefix string. Default is an empty string.
+    suffix (str, optional): Suffix string. Default is an empty string.
+    decimals (int, optional): Positive number of decimals in percent complete. Default is 1.
+    length (int, optional): Character length of the bar. Default is 100.
+    fill (str, optional): Bar fill character. Default is a solid block ('█').
+    print_end (str, optional): End character (e.g., '\r', '\n'). Default is '\r'.
+
+    Example:
+    >>> import time
+    >>> total = 10
+    >>> for i in range(total):
+    >>>     time.sleep(0.1)  # Simulate some work.
+    >>>     print_progress_bar(i + 1, total, prefix='Progress:', suffix='Complete', length=50)
+    """
+    percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
+    filled_length = int(length * iteration // total)
+    bar = fill * filled_length + '-' * (length - filled_length)
+    print(f'\r{prefix} |{bar}| {percent}% {suffix}', end=print_end)
+    # Print New Line on Complete
+    if iteration == total: 
+        print()
+        
+        
+def find_index_by_val(arr, target_val, find_last=True):
+    """
+    Find the index of a target value in an array, with an option to find the first or last occurrence.
+
+    Parameters:
+    arr (list): The array to search through.
+    target_val (any): The value to search for in the array.
+    find_last (bool, optional): If True, returns the index of the last occurrence of the target value.
+                                If False, returns the index of the first occurrence. Default is True.
+
+    Returns:
+    int: The index of the target value in the array. Returns -1 if the value is not found.
+
+    Example:
+    >>> arr = [1, 2, 3, 4, 2, 5]
+    >>> print(find_index_by_val(arr, 2))  # Finds the last index (4) of 2
+    >>> print(find_index_by_val(arr, 2, find_last=False))  # Finds the first index (1) of 2
+    """
+    idx = -1
+    for index, val in enumerate(arr):
+        if val == target_val:
+            idx = index
+            if not find_last:
+                break
+    return idx
+	
+
+def lin_regression(x, y):
+    """
+    Calculate the coefficients of a linear regression line between two datasets.
+
+    This function computes the slope (a) and intercept (b) of the linear regression line 
+    that best fits the datasets x (independent variable) and y (dependent variable) based on
+    the least squares method.
+
+    Parameters:
+    x (numpy.ndarray): Array representing the independent variable (e.g., restored image).
+    y (numpy.ndarray): Array representing the dependent variable (e.g., original image).
+
+    Returns:
+    tuple: A tuple (a, b) where 'a' is the slope and 'b' is the intercept of the regression line.
+
+    Example:
+    >>> x = np.array([1, 2, 3, 4, 5])
+    >>> y = np.array([2, 4, 6, 8, 10])
+    >>> slope, intercept = lin_regression(x, y)
+    >>> print(slope, intercept)  # Expected output: (2.0, 0.0) for a perfect linear relationship.
+    """
+    num = np.mean(x * y) - np.mean(x) * np.mean(y)
+    denum = np.mean(x ** 2) - np.mean(x) ** 2
+    a = num / denum
+    b = np.mean(y) - a * np.mean(x)
+    return a, b
+
+
+###################################################################################################################
+#                                                Other (NOT REWORKED)                         			          #
+###################################################################################################################
 
 
 def fit_clement(x_freq, y_freq, alpha1, alpha2, eta=0.1, angle=3):
@@ -1043,6 +1359,15 @@ def fit_clement(x_freq, y_freq, alpha1, alpha2, eta=0.1, angle=3):
     fp = abs(angle * x  + y)
     f = np.sqrt((1 - eta) * f ** 2 + eta * fp ** 2)    
     f = (1 + abs(f)) ** (-alpha1) + 0.02 * (1 + abs(f)) ** (-alpha2)
+    return f
+
+
+def fit_clement_new(x_freq, y_freq, alpha1, eta=0.1, angle=1):
+    x, y = np.meshgrid(x_freq, y_freq)
+    f = np.hypot(x, y)
+    fp = abs(y - angle * x)
+    f = np.sqrt((1 - eta) * f ** 2 + eta * fp ** 2)    
+    f = 1 / ((1 + abs(f)) ** alpha1)
     return f
 
 
@@ -1098,15 +1423,7 @@ def surrogates(x, ns, tol_pc=5., verbose=True, maxiter=1E6, sorttype="quicksort"
 
         xs[k] = np.real(z_n)
     return xs
-
-
-def adjust_freq_1d(img):
-    return np.append(img, abs(img[0]))
-
-
-def adjust_img_1d(img):
-    return np.append(img, img[0])
-        
+      
         
 def gen_cloud(x_size, y_size, factor=2.4):
     xx = np.linspace(-x_size / 2, x_size / 2, x_size)
@@ -1119,84 +1436,6 @@ def gen_cloud(x_size, y_size, factor=2.4):
     return normalize_img(cloud_spatial)
 
 
-# Reworked
-def show_images(*images, vrange=None, x_fig_size=10, y_fig_size=10, cmap='gray', graphs_per_row=2):
-    row_num = len(images) // graphs_per_row + 1 if len(images) % graphs_per_row else len(images) // graphs_per_row
-    col_num = len(images) // row_num + 1 if len(images) % row_num else len(images) // row_num
-    images_len = len(images)
-    
-    f, axes = plt.subplots(row_num, col_num, figsize=(x_fig_size, y_fig_size))  
-    if row_num == 1 and col_num == 1:
-        axes = np.array([axes])
-    
-    for index, ax in enumerate(axes.flatten()):
-        if index < images_len:
-            if vrange:
-                vmin, vmax = vrange
-                im = ax.imshow(images[index], cmap=cmap, vmin=vmin, vmax=vmax, aspect='equal')
-                
-            else:
-                im = ax.imshow(images[index], cmap=cmap, aspect='equal')
-            divider = make_axes_locatable(ax)
-            cax = divider.append_axes("right", size="5%", pad=0.05)
-            plt.colorbar(im, cax=cax)
-        else:
-            ax.axis('off')
-
-    plt.tight_layout()
-    return f, axes
-
-    
-def show_surfaces(*surfaces, axes=None, cmap=None, colorscale='Thermal', showscale=True):  
-    if cmap:
-        cmin, cmax = cmap
-    else:
-        if axes:
-            z_data = surfaces
-        else:
-            z_data = [surf[-1] for surf in surfaces]
-        cmin, cmax = np.min(z_data), np.max(z_data)
-    
-    fig = go.Figure()
-    for surf in surfaces:
-        if axes: 
-            x, y = axes
-            z = surf
-        else:
-            x, y, z = surf
-        fig.add_trace(go.Surface(x=x, y=y, z=z, cmin=cmin, cmax=cmax, colorscale=colorscale, showscale=showscale))
-        showscale = False
-    return fig
-    
-	
-def plot_graphs(*graphs, ax=None, figsize=None, grid=False, xlabel='', ylabel='', title=''):   
-    if ax is None:
-        fig, ax = plt.subplots(figsize=figsize)
-        
-    for graph in graphs:        
-        if isinstance(graph, (list, tuple)):
-            ax.plot(*graph)
-        else:
-            ax.plot(graph)
-    
-    ax.grid(grid)
-    ax.set_xlabel(xlabel)
-    ax.set_ylabel(ylabel)
-    ax.set_title(title)
-        
-    return ax
-
-
-def lin_regression(x, y):
-    # y - original img
-    # x - restored img
-    num = np.mean(x * y) - np.mean(x) * np.mean(y)
-    denum = np.mean(x ** 2) - np.mean(x) ** 2
-    a = num / denum
-    b = np.mean(y) - a * np.mean(x)
-    return a, b
-
-
 def lin_phase(start, end, size):
     pos_freq = np.linspace(start, end, size // 2)
     neg_freq = -pos_freq[::-1]
@@ -1206,19 +1445,13 @@ def lin_phase(start, end, size):
     else: 
         freq = np.append(neg_freq, pos_freq)
     return freq
-
-
-def open_img(filename, no_mean=True, grayscale=True):
-    img = Image.open(filename)
-    
-    if grayscale:
-        img = img.convert('L')
-    
-    if no_mean:
-        img -= np.mean(img)
-    
-    return np.array(img)
 	
+	
+def gaussian(x_vals, y_vals, std):
+    arg = x_vals + y_vals
+    exp = np.exp(-(arg ** 2) / 2 / std)
+    return exp
+
 
 ###################################################################################################################
 #                                          Latice noise utils                                                     #
@@ -1327,49 +1560,3 @@ def gen_value_noise_2d(outp_noise_shape, iterm_mesh_shape, octave_nums, persiste
     # noise_map = np.sum(harmonics, axis=0)
     # noise_map = (noise_map - np.min(noise_map)) / (np.max(noise_map) - np.min(noise_map))
     return harmonics
-
-
-###################################################################################################################
-#                                                    FFT utils                                                    #
-###################################################################################################################
-
-
-def rmse(arr1, arr2, weight_arr=None, normalize=False):
-    if arr1.shape != arr2.shape:
-        raise ValueError("Shape mismatch between input arrays.")
-    
-    if weight_arr is None:
-        weight_arr = np.ones(arr1.shape)
-    elif arr1.shape != weight_arr.shape:
-        raise ValueError("Shape mismatch between input arrays and weight array.")
-    
-    weight_mean = np.mean(weight_arr) 
-    diff = weight_arr * (arr1 - arr2) ** 2
-    mse = np.sum(diff) / arr1.size
-    mse = mse / weight_mean if normalize else mse
-    return np.sqrt(mse)
-
-
-def print_progress_bar(iteration, total, prefix='', suffix='', decimals = 1, 
-                       length = 100, fill = '█', print_end='\r'):
-    percent = ("{0:." + str(decimals) + "f}").format(100 * (iteration / float(total)))
-    filled_length = int(length * iteration // total)
-    bar = fill * filled_length + '-' * (length - filled_length)
-    print(f'\r{prefix} |{bar}| {percent}% {suffix}', end=print_end)
-    # Print New Line on Complete
-    if iteration == total: 
-        print()
-        
-        
-def gaussian(x_vals, y_vals, std):
-    arg = x_vals + y_vals
-    exp = np.exp(-(arg ** 2) / 2 / std)
-    return exp
-
-
-def find_index_by_val(arr, target_val, find_last=True):
-    idx = 0
-    for index, val in enumerate(arr):
-        if val == target_val:
-            idx = index
-    return idx
