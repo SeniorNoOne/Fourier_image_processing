@@ -1346,10 +1346,275 @@ def lin_regression(x, y):
     a = num / denum
     b = np.mean(y) - a * np.mean(x)
     return a, b
+	
+	
+def gaussian(x_vals, y_vals, std):
+    """
+    Calculate the Gaussian function for given x and y values with a specified standard deviation.
+
+    The function calculates the Gaussian value based on the sum of x and y values. 
+    This is not a typical 2D Gaussian distribution, which would consider x and y independently.
+
+    Parameters:
+    x_vals (numpy.ndarray): An array of x values.
+    y_vals (numpy.ndarray): An array of y values. It should be the same shape as x_vals.
+    std (float): The standard deviation for the Gaussian function.
+
+    Returns:
+    numpy.ndarray: The calculated Gaussian values.
+
+    Example:
+    >>> x = np.array([0, 1, 2])
+    >>> y = np.array([0, 1, 2])
+    >>> gaussian_values = gaussian(x, y, 1)
+    >>> print(gaussian_values)
+    """
+    arg = x_vals + y_vals
+    exp = np.exp(-(arg ** 2) / (2 * std ** 2))
+    return exp
 
 
 ###################################################################################################################
-#                                                Other (NOT REWORKED)                         			          #
+#                                          Latice noise utils                                                     #
+###################################################################################################################
+
+
+def graph_mesh(x_min, x_max, x_step):
+    """
+    Generate a 1D NumPy array (mesh) with values from x_min to x_max (inclusive) at specified intervals.
+
+    This function is useful for creating coordinate grids, especially for graphing purposes, 
+    where you need a range of values at a certain step size.
+
+    Parameters:
+    x_min (float or int): The starting value of the range.
+    x_max (float or int): The ending value of the range. The function includes this value in the output if possible.
+    x_step (float or int): The step size between each value in the range.
+
+    Returns:
+    numpy.ndarray: A NumPy array containing values from x_min to x_max at intervals of x_step.
+
+    Example:
+    >>> mesh = graph_mesh(0, 10, 2)
+    >>> print(mesh)  # Output: [ 0  2  4  6  8 10]
+    """
+    mesh = np.arange(x_min, x_max + x_step, x_step)
+    return mesh
+
+
+def qubic_interp(x):
+    """
+    Perform cubic Hermite interpolation on a given input.
+
+    This function applies a cubic interpolation formula to the input value 'x'.
+    It's a common spline interpolation method used in smoothing and generating curves.
+
+    Parameters:
+    x (float or numpy.ndarray): Input value or array of values for interpolation.
+
+    Returns:
+    float or numpy.ndarray: The result of cubic Hermite interpolation on 'x'.
+
+    Example:
+    >>> print(qubic_interp(0.5))  # Interpolate at the midpoint
+    >>> print(qubic_interp(np.array([0, 0.5, 1])))  # Interpolate at several points
+    """
+    return x * x * (3 - 2 * x)
+
+
+def fifth_order_interp(x):
+    """
+    Perform fifth-order polynomial interpolation on a given input.
+
+    This function applies a fifth-order polynomial formula to the input value 'x'.
+    It's a more complex spline interpolation method than cubic interpolation, providing 
+    a smoother transition commonly used in graphics and numerical simulations.
+
+    Parameters:
+    x (float or numpy.ndarray): Input value or array of values for interpolation.
+
+    Returns:
+    float or numpy.ndarray: The result of fifth-order polynomial interpolation on 'x'.
+
+    Example:
+    >>> print(fifth_order_interp(0.5))  # Interpolate at the midpoint
+    >>> print(fifth_order_interp(np.array([0, 0.5, 1])))  # Interpolate at several points
+    """
+    return 6 * x ** 5 - 15 * x ** 4 + 10 * x ** 3
+
+
+def gen_value_noise_1d(outp_noise_size, iterm_mesh_size, octaves_num, persistence, func=None):
+    """
+    Generate 1D value noise over multiple octaves.
+
+    This function creates 1D value noise, typically used in procedural generation. It generates
+    noise for a specified number of octaves, each with decreasing amplitude influenced by the 
+    persistence value. A custom interpolation function can be applied to each octave.
+
+    Parameters:
+    outp_noise_size (int): The size of the output noise array.
+    iterm_mesh_size (int): The size of the mesh (grid) for the first octave.
+    octaves_num (int): The number of octaves to generate.
+    persistence (float): The factor by which the amplitude of each octave decreases.
+    func (callable, optional): Custom function for interpolating noise values. Default is None.
+
+    Returns:
+    tuple: A tuple containing two lists - one for the harmonics (noise values) of each octave and 
+           another for the random values used to generate these harmonics.
+
+    Example:
+    >>> harmonics, random_values = gen_value_noise_1d(1024, 256, 4, 0.5)
+    >>> print(len(harmonics))  # Number of octaves
+    >>> print(len(random_values))  # Number of random value sets
+    """
+    random_values = []
+    harmonics = []
+    amplitude = persistence
+
+    for _ in range(octaves_num):
+        rv = amplitude * np.random.rand(outp_noise_size // iterm_mesh_size + 1)
+        octave = gen_single_octave_1d(rv, outp_noise_size, iterm_mesh_size, func=func)
+
+        random_values.append(rv)
+        harmonics.append(octave)
+        iterm_mesh_size //= 2
+        amplitude *= persistence
+
+    return harmonics, random_values
+
+
+def gen_single_octave_1d(random_values, size, grid_size, func=None):
+    """
+    Generate a single octave of 1D noise.
+
+    This function creates a single octave of 1D noise using linear interpolation between 
+    random values. An optional custom interpolation function can be provided for different 
+    smoothing effects.
+
+    Parameters:
+    random_values (numpy.ndarray): An array of random values used for noise generation.
+    size (int): The size of the output noise map.
+    grid_size (int): The size of the grid cells used for interpolation.
+    func (callable, optional): Custom function for interpolating noise values. Default is None.
+
+    Returns:
+    numpy.ndarray: A NumPy array containing the generated noise map.
+
+    Example:
+    >>> random_values = np.random.rand(11)
+    >>> noise_map = gen_single_octave_1d(random_values, 100, 10)
+    >>> print(noise_map.shape)  # Output: (101,)
+    """
+    num_cells_x = size // grid_size
+    noise_map = np.zeros(size + 1)
+
+    for x in range(size):
+        cell_x = x // grid_size
+        local_x = (x % grid_size) / grid_size
+        left = random_values[cell_x]
+        right = random_values[cell_x + 1]
+        smooth_x = func(local_x) if func else local_x
+        interp = left * (1 - smooth_x) + right * smooth_x
+        noise_map[x] += interp
+        
+    noise_map[-1] = random_values[-1]
+    return noise_map
+
+
+def gen_value_noise_2d(outp_noise_shape, iterm_mesh_shape, octave_nums, persistence, func=None):
+    """
+    Generate 2D value noise over multiple octaves.
+
+    This function creates 2D value noise for a specified number of octaves, each with 
+    decreasing amplitude influenced by the persistence value. A custom interpolation 
+    function can be applied to each octave for different smoothing effects.
+
+    Parameters:
+    outp_noise_shape (tuple): The shape (height, width) of the output noise map.
+    iterm_mesh_shape (tuple): The shape (grid height, grid width) for the first octave.
+    octave_nums (int): The number of octaves to generate.
+    persistence (float): The factor by which the amplitude of each octave decreases.
+    func (callable, optional): Custom function for interpolating noise values. Default is None.
+
+    Returns:
+    list: A list containing the harmonics (noise values) of each octave.
+
+    Example:
+    >>> outp_shape = (256, 256)
+    >>> mesh_shape = (32, 32)
+    >>> harmonics = gen_value_noise_2d(outp_shape, mesh_shape, 4, 0.5)
+    >>> print(len(harmonics))  # Output: 4
+    """
+    harmonics = []
+    random_values = []
+    h, w = outp_noise_shape
+    gr_h, gr_w = iterm_mesh_shape
+    amplitude = persistence  
+
+    for _ in range(octave_nums):
+        rv = amplitude * np.random.rand(h // gr_h + 1, w // gr_w + 1)
+        octave = gen_single_octave_2d(rv, outp_noise_shape, (gr_h, gr_w), func=func)
+
+        random_values.append(rv)
+        harmonics.append(octave)
+        gr_h, gr_w = gr_h // 2, gr_w // 2
+        amplitude *= persistence
+		
+    # noise_map = np.sum(harmonics, axis=0)
+    # noise_map = (noise_map - np.min(noise_map)) / (np.max(noise_map) - np.min(noise_map))
+    return harmonics
+
+
+def gen_single_octave_2d(random_values, outp_noise_shape, iterm_mesh_shape, func=None):
+    """
+    Generate a single octave of 2D noise.
+
+    This function creates a single octave of 2D noise using bilinear interpolation 
+    between points in a grid of random values. An optional custom interpolation function 
+    can be provided for different smoothing effects.
+
+    Parameters:
+    random_values (numpy.ndarray): A 2D array of random values used for noise generation.
+    outp_noise_shape (tuple): The shape (height, width) of the output noise map.
+    iterm_mesh_shape (tuple): The shape (grid height, grid width) for interpolation.
+    func (callable, optional): Custom function for interpolating noise values. Default is None.
+
+    Returns:
+    numpy.ndarray: A NumPy array containing the generated 2D noise map.
+
+    Example:
+    >>> random_values = np.random.rand(11, 11)
+    >>> noise_map = gen_single_octave_2d(random_values, (100, 100), (10, 10))
+    >>> print(noise_map.shape)  # Output: (101, 101)
+    """
+    h, w = outp_noise_shape
+    gr_h, gr_w = iterm_mesh_shape
+    noise_map = np.zeros((h + 1, w + 1))
+
+    for y in range(h):
+        for x in range(w):
+            cell_x, cell_y = x // gr_w, y // gr_h
+            local_x, local_y = (x % gr_w) / gr_w, (y % gr_h) / gr_h
+
+            top_left = random_values[cell_y, cell_x]
+            top_right = random_values[cell_y, cell_x + 1]
+            bottom_left = random_values[cell_y + 1, cell_x]
+            bottom_right = random_values[cell_y + 1, cell_x + 1]
+
+            smooth_x = func(local_x) if func else local_x
+            smooth_y = func(local_y) if func else local_y
+
+            interp_top = top_left * (1 - smooth_x) + top_right * smooth_x
+            interp_bottom = bottom_left * (1 - smooth_x) + bottom_right * smooth_x
+            noise_map[y, x] = interp_top * (1 - smooth_y) + interp_bottom * smooth_y
+            noise_map[-1, x] = bottom_left * (1 - smooth_x) + bottom_right * smooth_x
+        noise_map[y, -1] = top_right * (1 - smooth_y) + bottom_right * smooth_y
+    noise_map[-1, -1] = random_values[-1, -1]
+    return noise_map
+
+
+###################################################################################################################
+#                                                Other (Deprecation candidates)              			          #
 ###################################################################################################################
 
 
@@ -1445,118 +1710,3 @@ def lin_phase(start, end, size):
     else: 
         freq = np.append(neg_freq, pos_freq)
     return freq
-	
-	
-def gaussian(x_vals, y_vals, std):
-    arg = x_vals + y_vals
-    exp = np.exp(-(arg ** 2) / 2 / std)
-    return exp
-
-
-###################################################################################################################
-#                                          Latice noise utils                                                     #
-###################################################################################################################
-
-
-def graph_mesh(x_min, x_max, x_step):
-    mesh = np.arange(x_min, x_max + 1, x_step)
-    return mesh
-
-
-def qubic_interp(x):
-    return x * x * (3 - 2 * x)
-
-
-def fifth_order_interp(x):
-    return 6 * x ** 5 - 15 * x ** 4 + 10 * x ** 3
-
-
-def gen_value_noise_1d(outp_noise_size, iterm_mesh_size, octaves_num, persistence, func=None):
-    random_values = []
-    harmonics = []
-    amplitude = persistence
-
-    for _ in range(octaves_num):
-        rv = amplitude * np.random.rand(outp_noise_size // iterm_mesh_size + 1)
-        octave = gen_single_octave_1d(rv, outp_noise_size, iterm_mesh_size, func=func)
-
-        random_values.append(rv)
-        harmonics.append(octave)
-        iterm_mesh_size = iterm_mesh_size // 2
-        amplitude *= persistence
-
-    return harmonics, random_values
-
-
-def gen_single_octave_1d(random_values, size, grid_size, func=None):
-    num_cells_x = size // grid_size
-    noise_map = np.zeros(size + 1)
-
-    for x in range(size):
-        cell_x = x // grid_size
-        local_x = (x % grid_size) / grid_size
-        left = random_values[cell_x]
-        right = random_values[cell_x + 1]
-        smooth_x = func(local_x) if func else local_x
-        interp = left * (1 - smooth_x) + right * smooth_x
-        noise_map[x] += interp
-        
-    noise_map[-1] = random_values[-1]
-    return noise_map
-
-
-def gen_single_octave_2d(random_values, outp_noise_shape, iterm_mesh_shape, func=None):
-    h, w = outp_noise_shape
-    gr_h, gr_w = iterm_mesh_shape
-    num_cells_x = w // gr_w
-    num_cells_y = h // gr_h
-    noise_map = np.zeros((h + 1, w + 1))
-    
-    for y in range(h):
-        for x in range(w):
-            cell_x = x // gr_w
-            cell_y = y // gr_h
-
-            local_x = (x % gr_w) / gr_w
-            local_y = (y % gr_h) / gr_h
-
-            top_left = random_values[cell_y, cell_x]
-            top_right = random_values[cell_y, cell_x + 1]
-            bottom_left = random_values[cell_y + 1, cell_x]
-            bottom_right = random_values[cell_y + 1, cell_x + 1]
-
-            if func is None:
-                smooth_x = local_x
-                smooth_y = local_y
-            else:
-                smooth_x = func(local_x)
-                smooth_y = func(local_y)
-
-            interp_top = top_left * (1 - smooth_x) + top_right * smooth_x
-            interp_bottom = bottom_left * (1 - smooth_x) + bottom_right * smooth_x
-            noise_map[y, x] += interp_top * (1 - smooth_y) + interp_bottom * smooth_y          
-            noise_map[-1, x] = bottom_left * (1 - smooth_x) + bottom_right * smooth_x
-        noise_map[y, -1] = top_right * (1 - smooth_y) + bottom_right * smooth_y
-    noise_map[-1, -1] = random_values[-1, -1]
-    return noise_map
-
-
-def gen_value_noise_2d(outp_noise_shape, iterm_mesh_shape, octave_nums, persistence, func=None):
-    harmonics = []
-    random_values = []
-    h, w = outp_noise_shape
-    gr_h, gr_w = iterm_mesh_shape
-    amplitude = persistence  
-
-    for _ in range(octave_nums):
-        rv = amplitude * np.random.rand(h // gr_h + 1, w // gr_w + 1)
-        octave = gen_single_octave_2d(rv, outp_noise_shape, (gr_h, gr_w), func=func)
-
-        random_values.append(rv)
-        harmonics.append(octave)
-        gr_h, gr_w = gr_h // 2, gr_w // 2
-        amplitude *= persistence
-
-    # noise_map = np.sum(harmonics, axis=0)
-    # noise_map = (noise_map - np.min(noise_map)) / (np.max(noise_map) - np.min(noise_map))
-    return harmonics
