@@ -49,7 +49,6 @@ def get_slice(arr, rows, cols):
         bottom = (1 - eta_row) * arr[r_b, c_l] + eta_row * arr[r_b, c_r]
         total = (1 - eta_col) * top + eta_col * bottom
         sliced_arr[index] = total
-
     return sliced_arr
 
 
@@ -87,7 +86,6 @@ def normalize(arr, zero_padding=False, offset_coef=0.001):
     else:
         offset = offset_coef * abs(min_val)
         new_arr = (arr - min_val + offset) / (max_val - min_val + offset)
-
     return new_arr
 
 
@@ -220,7 +218,6 @@ def clip_graph(x_arr, y_arr, x_min=0, x_max=100, y_min=0, y_max=100):
     # Apply clipping to both x and y arrays
     x_arr = x_arr[x_mask & y_mask]
     y_arr = y_arr[x_mask & y_mask]
-
     return x_arr, y_arr
 
 
@@ -822,7 +819,6 @@ def spatial_smooth_filter(x_size, y_size, depth, horiz=True):
         kernel = np.tile(values, (y_size, 1))
     else:
         kernel = values[:, np.newaxis] * np.ones((1, x_size))
-
     return kernel
 
 
@@ -1004,7 +1000,6 @@ def shift_img_x(img, dx, is_dx_pos=True):
     else:
         c1 = img[:, dx:]
         c2 = img[:, :dx]
-
     return np.concatenate((c1, c2), axis=1)
 
 
@@ -1040,7 +1035,6 @@ def shift_img_y(img, dy, is_dy_pos=True):
     else:
         c1 = img[dy:, :]
         c2 = img[:dy, :]
-
     return np.concatenate((c1, c2), axis=0)
 
 
@@ -1262,7 +1256,6 @@ def open_img(filename, no_mean=True, grayscale=True):
 
     if no_mean:
         img_array -= np.mean(img_array)
-
     return img_array
 
 
@@ -1533,7 +1526,6 @@ def gen_value_noise_1d(outp_noise_size, iterm_mesh_size, octaves_num, persistenc
         harmonics.append(octave)
         iterm_mesh_size //= 2
         amplitude *= persistence
-
     return harmonics, random_values
 
 
