@@ -1296,8 +1296,9 @@ def rmse(arr1, arr2, weight_arr=None, normalize=False):
 
     diff = weight_arr * (arr1 - arr2) ** 2
     mse = np.sum(diff) / arr1.size
-    mse = mse / np.mean(weight_arr) if normalize else mse
-    return np.sqrt(mse)
+    rmse = np.sqrt(mse)
+    rmse = rmse / np.mean(weight_arr) if normalize else rmse
+    return rmse
 
 
 def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1,
@@ -1672,10 +1673,10 @@ def fit_clement(x_freq, y_freq, alpha1, alpha2, eta=0.1, angle=3):
     return f
 
 
-def fit_clement_new(x_freq, y_freq, alpha1, eta=0.1, angle=1):
+def fit_clement_new(x_freq, y_freq, alpha1, eta=0.1, slope=1):
     x, y = np.meshgrid(x_freq, y_freq)
     f = np.hypot(x, y)
-    fp = abs(y - angle * x)
+    fp = abs(y - slope * x)
     f = np.sqrt((1 - eta) * f ** 2 + eta * fp ** 2)
     f = 1 / ((1 + abs(f)) ** alpha1)
     return f
