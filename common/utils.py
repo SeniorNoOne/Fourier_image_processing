@@ -1697,9 +1697,7 @@ def surrogates(x, ns, tol_pc=5., verbose=True, maxiter=1E6, sorttype="quicksort"
     # loop over surrogate number
     pb_fmt = "{desc:<5.5}{percentage:3.0f}%|{bar:30}{r_bar}"
     pb_desc = "Estimating IAAFT surrogates ..."
-    for k in tqdm(range(ns), bar_format=pb_fmt, desc=pb_desc,
-                  disable=not verbose):
-
+    for k in range(ns):
         # 1) Generate random shuffle of the data
         count = 0
         r_prev = np.random.permutation(ii)
