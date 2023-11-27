@@ -1754,3 +1754,28 @@ def lin_phase(start, end, size):
     else:
         freq = np.append(neg_freq, pos_freq)
     return freq
+
+
+def gaussian_new(x_vals, y_vals, std):
+    exp = np.exp(-(x_vals ** 2 + y_vals ** 2) / (2 * std ** 2))
+    return exp
+
+
+def fit(x_freq, y_freq, alpha1, eta=0.1, angle=1):
+    x, y = np.meshgrid(x_freq, y_freq)
+    f = np.hypot(x, y)
+    fp = abs(y - angle * x)
+    f = np.sqrt((1 - eta) * f ** 2 + eta * fp ** 2)
+    f = 1 / ((1 + abs(f)) ** alpha1)
+    return f
+
+            
+def read_file(filename): 
+    with open(filename, 'rb') as file:
+        res = np.load(file)
+    return res
+    
+    
+def write_file(filename, var):
+    with open(filename, 'wb') as file:
+        np.save(file, var)
