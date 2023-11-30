@@ -1,0 +1,12 @@
+name: Python code checks
+
+on: [push]
+
+jobs:
+  flake8:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Run flake8 on Jupyter Notebooks
+      uses: mhitza/flake8-jupyter-notebook@v1
