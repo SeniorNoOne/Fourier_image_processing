@@ -1296,8 +1296,9 @@ def rmse(arr1, arr2, weight_arr=None, normalize=False):
 
     diff = weight_arr * (arr1 - arr2) ** 2
     mse = np.sum(diff) / arr1.size
-    mse = mse / np.mean(weight_arr) if normalize else mse
-    return np.sqrt(mse)
+    rmse = np.sqrt(mse)
+    rmse = rmse / np.mean(weight_arr) if normalize else rmse
+    return rmse
 
 
 def print_progress_bar(iteration, total, prefix='', suffix='', decimals=1,
@@ -1672,10 +1673,10 @@ def fit_clement(x_freq, y_freq, alpha1, alpha2, eta=0.1, angle=3):
     return f
 
 
-def fit_clement_new(x_freq, y_freq, alpha1, eta=0.1, angle=1):
+def fit_clement_new(x_freq, y_freq, alpha1, eta=0.1, slope=1):
     x, y = np.meshgrid(x_freq, y_freq)
     f = np.hypot(x, y)
-    fp = abs(y - angle * x)
+    fp = abs(y - slope * x)
     f = np.sqrt((1 - eta) * f ** 2 + eta * fp ** 2)
     f = 1 / ((1 + abs(f)) ** alpha1)
     return f
@@ -1696,9 +1697,7 @@ def surrogates(x, ns, tol_pc=5., verbose=True, maxiter=1E6, sorttype="quicksort"
     # loop over surrogate number
     pb_fmt = "{desc:<5.5}{percentage:3.0f}%|{bar:30}{r_bar}"
     pb_desc = "Estimating IAAFT surrogates ..."
-    for k in tqdm(range(ns), bar_format=pb_fmt, desc=pb_desc,
-                  disable=not verbose):
-
+    for k in range(ns):
         # 1) Generate random shuffle of the data
         count = 0
         r_prev = np.random.permutation(ii)
@@ -1755,3 +1754,28 @@ def lin_phase(start, end, size):
     else:
         freq = np.append(neg_freq, pos_freq)
     return freq
+
+
+def gaussian_new(x_vals, y_vals, std):
+    exp = np.exp(-(x_vals ** 2 + y_vals ** 2) / (2 * std ** 2))
+    return exp
+
+
+def fit(x_freq, y_freq, alpha1, eta=0.1, angle=1):
+    x, y = np.meshgrid(x_freq, y_freq)
+    f = np.hypot(x, y)
+    fp = abs(y - angle * x)
+    f = np.sqrt((1 - eta) * f ** 2 + eta * fp ** 2)
+    f = 1 / ((1 + abs(f)) ** alpha1)
+    return f
+
+            
+def read_file(filename): 
+    with open(filename, 'rb') as file:
+        res = np.load(file)
+    return res
+    
+    
+def write_file(filename, var):
+    with open(filename, 'wb') as file:
+        np.save(file, var)
