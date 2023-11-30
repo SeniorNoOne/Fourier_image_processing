@@ -1,2 +1,6 @@
 [flake8]
 exclude = proj
+
+ignore = E999
+per-file-ignores =
+    *.ipynb: E999
