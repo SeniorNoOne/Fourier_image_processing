@@ -1256,7 +1256,7 @@ def open_img(filename, no_mean=True, grayscale=True):
 
     if no_mean:
         img_array -= np.mean(img_array)
-    return img_array
+    return np.array(img_array, dtype=float)
 
 
 def rmse(arr1, arr2, weight_arr=None, normalize=False):
